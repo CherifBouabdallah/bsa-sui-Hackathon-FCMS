@@ -1,10 +1,9 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import { Button } from "./ui/button";
 import { useSuiClient } from "@mysten/dapp-kit";
-import { useNetworkVariable } from "../networkConfig";
-import { formatSuiAmount, formatDate } from "../lib/blockchain";
 import ClipLoader from "react-spinners/ClipLoader";
+import { Alert, AlertDescription } from "./ui/alert";
 
 interface TransactionEvent {
   id: string;
@@ -19,20 +18,34 @@ interface MoneyFlowVerificationProps {
   campaignOwner: string;
 }
 
+const DEVNET_CROWDFUNDING_PACKAGE_ID = "0xb1b127b4ec9bba67a818e96fb597c465ebb8779f6836c1767f47349d5dc55132";
+
 export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVerificationProps) {
   const [events, setEvents] = useState<TransactionEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [totalDonated, setTotalDonated] = useState(0);
   const [totalWithdrawn, setTotalWithdrawn] = useState(0);
   const [totalRefunded, setTotalRefunded] = useState(0);
+  const [error, setError] = useState<string | null>(null);
 
   const suiClient = useSuiClient();
-  const packageId = useNetworkVariable("crowdfundingPackageId");
+
+  // Format SUI amount
+  const formatSuiAmount = (mist: number): string => {
+    const sui = mist / 1_000_000_000;
+    return sui.toFixed(4);
+  };
+
+  // Format date
+  const formatDate = (timestamp: number): string => {
+    return new Date(timestamp).toLocaleString();
+  };
 
   const loadTransactionHistory = async () => {
     setIsLoading(true);
+    setError(null);
+    
     try {
-      // Query all events for this campaign
       const eventTypes = [
         'CampaignCreated',
         'Donated', 
@@ -50,9 +63,9 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
         try {
           const result = await suiClient.queryEvents({
             query: {
-              MoveEventType: `${packageId}::crowd::${eventType}`,
+              MoveEventType: `${DEVNET_CROWDFUNDING_PACKAGE_ID}::crowd::${eventType}`,
             },
-            limit: 100,
+            limit: 50,
             order: 'ascending',
           });
 
@@ -81,8 +94,8 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
               }
             }
           }
-        } catch (error) {
-          console.log(`No ${eventType} events found or error:`, error);
+        } catch (err) {
+          console.log(`No ${eventType} events found or error:`, err);
         }
       }
 
@@ -93,18 +106,19 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
       setTotalDonated(donated);
       setTotalWithdrawn(withdrawn);
       setTotalRefunded(refunded);
-    } catch (error) {
-      console.error("Error loading transaction history:", error);
+    } catch (err) {
+      console.error("Error loading transaction history:", err);
+      setError("Failed to load transaction history. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (campaignId && packageId) {
+    if (campaignId) {
       loadTransactionHistory();
     }
-  }, [campaignId, packageId]);
+  }, [campaignId]);
 
   const getEventIcon = (type: string) => {
     switch (type) {
@@ -133,18 +147,22 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
     
     switch (type) {
       case 'CampaignCreated':
-        return `Campaign created by ${data.owner} with goal of ${formatSuiAmount(data.goal)} SUI`;
+        return `Campaign created with goal of ${formatSuiAmount(data.goal)} SUI`;
       case 'Donated':
-        return `${formatSuiAmount(data.amount)} SUI donated by ${data.donor}`;
+        return `${formatSuiAmount(data.amount)} SUI donated`;
       case 'Withdrawn':
-        return `${formatSuiAmount(data.amount)} SUI withdrawn to ${data.to}`;
+        return `${formatSuiAmount(data.amount)} SUI withdrawn to owner`;
       case 'Refunded':
-        return `${formatSuiAmount(data.amount)} SUI refunded to ${data.to}`;
+        return `${formatSuiAmount(data.amount)} SUI refunded`;
       case 'Finalized':
-        return `Campaign finalized with state: ${data.state === 1 ? 'Succeeded' : 'Failed'}`;
+        return `Campaign finalized - ${data.state === 1 ? '✅ Succeeded' : '❌ Failed'}`;
       default:
         return `${type} event`;
     }
+  };
+
+  const formatAddress = (address: string) => {
+    return `${address.slice(0, 10)}...${address.slice(-8)}`;
   };
 
   const explorerUrl = `https://suiexplorer.com/object/${campaignId}?network=testnet`;
@@ -157,25 +175,34 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
           🔍 Money Flow Verification
         </CardTitle>
         <CardDescription className="text-gray-600">
-          Track where donations go and verify the campaign owner receives funds properly.
+          Track all donations and verify where funds go
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        {/* Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-green-50 p-4 rounded-lg">
+        {/* Error State */}
+        {error && (
+          <Alert className="border-red-200">
+            <AlertDescription className="text-red-600">
+              ⚠️ {error}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-green-50 p-4 rounded-lg border border-green-200">
             <p className="text-sm text-green-600 font-medium">Total Donated</p>
             <p className="text-2xl font-bold text-green-800">{formatSuiAmount(totalDonated)} SUI</p>
           </div>
-          <div className="bg-purple-50 p-4 rounded-lg">
+          <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
             <p className="text-sm text-purple-600 font-medium">Withdrawn</p>
             <p className="text-2xl font-bold text-purple-800">{formatSuiAmount(totalWithdrawn)} SUI</p>
           </div>
-          <div className="bg-orange-50 p-4 rounded-lg">
+          <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
             <p className="text-sm text-orange-600 font-medium">Refunded</p>
             <p className="text-2xl font-bold text-orange-800">{formatSuiAmount(totalRefunded)} SUI</p>
           </div>
-          <div className="bg-blue-50 p-4 rounded-lg">
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
             <p className="text-sm text-blue-600 font-medium">Current Balance</p>
             <p className="text-2xl font-bold text-blue-800">{formatSuiAmount(currentBalance)} SUI</p>
           </div>
@@ -183,25 +210,27 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
 
         {/* Owner Verification */}
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <h3 className="font-semibold text-yellow-800 mb-2">⚠️ Verify Campaign Owner</h3>
+          <h3 className="font-semibold text-yellow-800 mb-2">⚠️ Campaign Owner Verification</h3>
           <p className="text-sm text-yellow-700 mb-2">
-            <span className="font-medium">Campaign Owner:</span> 
-            <code className="bg-yellow-100 px-2 py-1 rounded text-xs ml-2">{campaignOwner}</code>
+            <span className="font-medium">Owner Address:</span>
           </p>
-          <p className="text-xs text-yellow-600">
-            ✅ Only this address can withdraw funds when the campaign succeeds.
+          <code className="block bg-yellow-100 px-3 py-2 rounded text-xs text-yellow-900 break-all">
+            {campaignOwner}
+          </code>
+          <p className="text-xs text-yellow-600 mt-2">
+            ✅ Only this address can withdraw funds when campaign succeeds
             <br />
-            ✅ All withdrawal transactions are publicly recorded on the blockchain.
+            ✅ All transactions are permanently recorded on blockchain
           </p>
         </div>
 
-        {/* External Verification Links */}
+        {/* Action Buttons */}
         <div className="flex flex-wrap gap-2">
           <a
             href={explorerUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
           >
             🔗 View on Sui Explorer
           </a>
@@ -213,7 +242,14 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#7A2F56'}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#963B6B'}
           >
-            {isLoading ? <ClipLoader size={16} color="white" /> : '🔄 Refresh History'}
+            {isLoading ? (
+              <>
+                <ClipLoader size={16} color="white" className="mr-2" />
+                Loading...
+              </>
+            ) : (
+              '🔄 Refresh History'
+            )}
           </Button>
         </div>
 
@@ -224,32 +260,38 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
           {isLoading ? (
             <div className="flex justify-center items-center py-8">
               <ClipLoader size={32} color="#963B6B" />
-              <span className="ml-2 text-gray-600">Loading transaction history...</span>
+              <span className="ml-3 text-gray-600">Loading transaction history...</span>
             </div>
           ) : events.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No transactions found for this campaign.</p>
+            <div className="text-gray-500 text-center py-8 bg-gray-50 rounded-lg">
+              <p>No transactions found for this campaign yet.</p>
+              <p className="text-sm mt-1">Transactions will appear here once donations are made.</p>
+            </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3 max-h-96 overflow-y-auto">
               {events.map((event, index) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50">
+                <div 
+                  key={`${event.id}-${index}`} 
+                  className="flex items-start gap-3 p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+                >
                   <div className={`p-2 rounded-full ${getEventColor(event.type)}`}>
-                    <span className="text-sm">{getEventIcon(event.type)}</span>
+                    <span className="text-lg">{getEventIcon(event.type)}</span>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900">
                       {formatEventDescription(event)}
                     </p>
-                    <p className="text-xs text-gray-500">
-                      {formatDate(event.timestamp)} • 
-                      <a
-                        href={`https://suiexplorer.com/txblock/${event.txDigest}?network=testnet`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="ml-1 text-blue-600 hover:underline"
-                      >
-                        View Transaction
-                      </a>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formatDate(event.timestamp)}
                     </p>
+                    <a
+                      href={`https://suiexplorer.com/txblock/${event.txDigest}?network=testnet`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1 mt-1"
+                    >
+                      View Transaction ↗
+                    </a>
                   </div>
                   <div className="text-xs text-gray-400">
                     #{index + 1}
@@ -265,12 +307,35 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
           <h3 className="font-semibold text-green-800 mb-2">🔒 Security Guarantees</h3>
           <ul className="text-sm text-green-700 space-y-1">
             <li>✅ Smart contract enforces only campaign owner can withdraw</li>
-            <li>✅ All transactions are recorded on blockchain (immutable)</li>
-            <li>✅ Withdrawal events show exact recipient address</li>
-            <li>✅ Failed campaigns automatically enable refunds</li>
-            <li>✅ No one can access funds except through smart contract rules</li>
+            <li>✅ All transactions are immutably recorded on blockchain</li>
+            <li>✅ Funds are held in escrow until campaign completes</li>
+            <li>✅ Failed campaigns automatically enable refunds for donors</li>
+            <li>✅ No intermediary can access or redirect funds</li>
           </ul>
         </div>
+
+        {/* Balance Verification */}
+        {events.length > 0 && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <h3 className="font-semibold text-blue-800 mb-2">💳 Balance Verification</h3>
+            <div className="text-sm text-blue-700 space-y-1">
+              <div className="flex justify-between">
+                <span>Total Incoming:</span>
+                <span className="font-mono font-bold">+{formatSuiAmount(totalDonated)} SUI</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Outgoing:</span>
+                <span className="font-mono font-bold">-{formatSuiAmount(totalWithdrawn + totalRefunded)} SUI</span>
+              </div>
+              <div className="border-t border-blue-300 pt-1 mt-2">
+                <div className="flex justify-between font-semibold">
+                  <span>Current Balance:</span>
+                  <span className="font-mono">{formatSuiAmount(currentBalance)} SUI</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
