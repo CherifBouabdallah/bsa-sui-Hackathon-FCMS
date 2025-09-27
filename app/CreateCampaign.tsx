@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
-import { Transaction } from "@mysten/sui/transactions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
 import { useNetworkVariable } from "./networkConfig";
+import { createCampaignTransaction } from "./lib/blockchain";
 import ClipLoader from "react-spinners/ClipLoader";
 
 export function CreateCampaign({
@@ -80,30 +80,17 @@ export function CreateCampaign({
       return;
     }
 
-    const goalInSui = parseFloat(formData.goal) * 1_000_000_000; // Convert SUI to MIST (1 SUI = 10^9 MIST)
+    const goalSui = parseFloat(formData.goal);
     const deadlineMs = new Date(formData.deadline).getTime();
     
-    // Create metadata object for IPFS
-    const metadata = {
-      title: formData.title,
-      description: formData.description,
-      imageUrl: formData.imageUrl,
-    };
-    
-    // For now, we'll use a simple string as CID placeholder
-    // In production, you would upload to IPFS and get the actual CID
-    const metadataCid = JSON.stringify(metadata);
-    const cidBytes = Array.from(new TextEncoder().encode(metadataCid));
-
-    const tx = new Transaction();
-    tx.moveCall({
-      arguments: [
-        tx.pure.u64(goalInSui),
-        tx.pure.u64(deadlineMs),
-        tx.pure.vector("u8", cidBytes),
-      ],
-      target: `${crowdfundingPackageId}::crowd::create_campaign`,
-    });
+    const tx = createCampaignTransaction(
+      crowdfundingPackageId,
+      goalSui,
+      deadlineMs,
+      formData.title,
+      formData.description,
+      formData.imageUrl || undefined
+    );
 
     signAndExecute(
       { transaction: tx },
