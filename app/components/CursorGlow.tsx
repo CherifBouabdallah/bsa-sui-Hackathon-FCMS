@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 
 interface Particle {
-  id: number;
+  id: string; // Changed to string for better uniqueness
   x: number;
   y: number;
   size: number;
@@ -23,6 +23,9 @@ export default function CursorGlow() {
   const [particles, setParticles] = useState<Particle[]>([]);
   const [trail, setTrail] = useState<Array<{x: number, y: number, opacity: number}>>([]);
   const [animationTime, setAnimationTime] = useState(0);
+  
+  // Add a counter ref for unique IDs
+  const particleIdCounter = useRef(0);
 
   // Create particles on mouse move
   const createParticles = useCallback((x: number, y: number, velocity: number) => {
@@ -34,8 +37,12 @@ export default function CursorGlow() {
       const speed = 1 + Math.random() * 3;
       const size = 2 + Math.random() * 4;
       
+      // Generate unique ID using counter and random component
+      particleIdCounter.current += 1;
+      const uniqueId = `particle-${particleIdCounter.current}-${Math.random().toString(36).substr(2, 9)}`;
+      
       newParticles.push({
-        id: Date.now() + i,
+        id: uniqueId,
         x: x + (Math.random() - 0.5) * 15,
         y: y + (Math.random() - 0.5) * 15,
         size: size,
@@ -122,20 +129,18 @@ export default function CursorGlow() {
 
   return (
     <>
-      {/* Main cursor effects */}
-      <div
+      {/* Main cursor effects - COMMENTED OUT TO REMOVE RED GLOW */}
+      {/* <div
         className="fixed inset-0 pointer-events-none z-5 transition-opacity duration-100"
         style={{
           opacity: isVisible ? 1 : 0,
           background: `
-            // Central pulsing core
             radial-gradient(
               ${60 * pulseScale}px circle at ${mousePosition.x}px ${mousePosition.y}px,
               rgba(150, 59, 107, 0.8) 0%,
               rgba(150, 59, 107, 0.4) 30%,
               transparent 70%
             ),
-            // Rotating ring effect
             conic-gradient(
               from ${rotationAngle}deg at ${mousePosition.x}px ${mousePosition.y}px,
               transparent 0deg,
@@ -146,16 +151,12 @@ export default function CursorGlow() {
               rgba(139, 142, 188, 0.2) 300deg,
               transparent 360deg
             ),
-            // Velocity-based stretching
-            ellipse(${200 + Math.abs(mouseVelocity.x) * 2}px ${200 + Math.abs(mouseVelocity.y) * 2}px at ${mousePosition.x}px ${mousePosition.y}px) {
-              background: radial-gradient(
-                ellipse,
-                rgba(150, 59, 107, 0.15) 0%,
-                rgba(150, 59, 107, 0.05) 50%,
-                transparent 80%
-              );
-            },
-            // Outer glow
+            radial-gradient(
+              ${200 + Math.abs(mouseVelocity.x) * 2}px ${200 + Math.abs(mouseVelocity.y) * 2}px at ${mousePosition.x}px ${mousePosition.y}px,
+              rgba(150, 59, 107, 0.15) 0%,
+              rgba(150, 59, 107, 0.05) 50%,
+              transparent 80%
+            ),
             radial-gradient(
               300px circle at ${mousePosition.x}px ${mousePosition.y}px,
               rgba(150, 59, 107, 0.1) 0%,
@@ -164,12 +165,12 @@ export default function CursorGlow() {
             )
           `
         }}
-      />
+      /> */}
 
       {/* Trail effect */}
       {trail.map((point, index) => (
         <div
-          key={`trail-${index}`}
+          key={`trail-${index}-${animationTime}`}
           className="fixed pointer-events-none z-4"
           style={{
             left: point.x - 3,
@@ -202,7 +203,6 @@ export default function CursorGlow() {
           }}
         />
       ))}
-
     </>
   );
 }
