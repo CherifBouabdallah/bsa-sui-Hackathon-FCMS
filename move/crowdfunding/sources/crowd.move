@@ -76,38 +76,35 @@ module crowdfunding::crowd {
     }
 
     /// Donate SUI to an active campaign. Mints a receipt to donor.
-   public entry fun donate(
-    c: &mut Campaign,
-    coins: Coin<SUI>,
-    ctx: &mut TxContext
-) {
-    // Vérifie que la campagne est active
-    assert!(c.state == STATE_ACTIVE, 2);
+    public entry fun donate(
+        c: &mut Campaign,
+        coins: Coin<SUI>,
+        clk: &Clock,
+        ctx: &mut TxContext
+    ) {
+        assert!(c.state == STATE_ACTIVE, 2);
+        let now = clock::timestamp_ms(clk);
+        assert!(now < c.deadline_ms, 3);
 
-    // Récupère l'heure actuelle
-    let now = clock::timestamp_ms();
-    assert!(now < c.deadline_ms, 3);
+        let amount = coin::value(&coins);
+        assert!(amount > 0, 4);
 
-    let amount = coin::value(&coins);
-    assert!(amount > 0, 4);
+        // Move coin into escrowed balance
+        let bal = coin::into_balance(coins);
+        balance::join(&mut c.treasury, bal);
+        c.raised = c.raised + amount;
 
-    // Déplace la monnaie vers le trésor de la campagne
-    let bal = coin::into_balance(coins);
-    balance::join(&mut c.treasury, bal);
-    c.raised = c.raised + amount;
-
-    // Mint du reçu pour le donateur
-    let receipt = DonationReceipt {
-        id: object::new(ctx),
-        campaign: object::uid_to_inner(&c.id),
-        donor: sender(ctx),
-        amount,
-        ts_ms: now,
-    };
-    event::emit(Donated { campaign: receipt.campaign, donor: receipt.donor, amount, ts_ms: now });
-    transfer::public_transfer(receipt, sender(ctx));
-}
-
+        // Mint receipt to donor
+        let receipt = DonationReceipt {
+            id: object::new(ctx),
+            campaign: object::uid_to_inner(&c.id),
+            donor: sender(ctx),
+            amount,
+            ts_ms: now,
+        };
+        event::emit(Donated { campaign: receipt.campaign, donor: receipt.donor, amount, ts_ms: now });
+        transfer::public_transfer(receipt, sender(ctx));
+    }
 
     /// Finalize after the deadline; sets Succeeded/Failed.
     public entry fun finalize(
@@ -168,5 +165,21 @@ module crowdfunding::crowd {
 
         event::emit(Refunded { campaign: object::uid_to_inner(&c.id), to, amount });
         transfer::public_transfer(coin_out, to);
+        
     }
+    /// Force la campagne en état SUCCEEDED (pour tests)
+    public entry fun force_succeeded(
+        c: &mut Campaign,
+        ctx: &mut TxContext
+    ) {
+        c.state = STATE_SUCCEEDED;
+
+    // Émet un événement pour le changement d'état
+        event::emit(Finalized { 
+        campaign: object::uid_to_inner(&c.id), 
+        state: c.state, 
+        raised: c.raised 
+        });
+    }
+
 }
