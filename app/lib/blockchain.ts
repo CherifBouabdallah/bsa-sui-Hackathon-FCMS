@@ -94,6 +94,39 @@ export const formatDate = (timestamp: number): string => {
   }).format(new Date(timestamp));
 };
 
+// Check if campaign funds have been withdrawn by examining treasury balance
+export const checkIfFundsWithdrawn = async (
+  suiClient: SuiClient,
+  campaignId: string
+): Promise<boolean> => {
+  try {
+    const result = await suiClient.getObject({
+      id: campaignId,
+      options: {
+        showContent: true,
+      },
+    });
+
+    if (!result.data?.content || result.data.content.dataType !== "moveObject") {
+      return false;
+    }
+
+    const content = result.data.content as any;
+    const fields = content.fields;
+    
+    // Check if campaign succeeded and has raised funds but treasury is empty
+    const raised = parseInt(fields.raised || "0");
+    const state = fields.state;
+    const treasuryBalance = parseInt(fields.treasury?.fields?.value || "0");
+    
+    // If campaign succeeded, has raised funds, but treasury is empty, then funds were withdrawn
+    return state === 1 && raised > 0 && treasuryBalance === 0;
+  } catch (error) {
+    console.error("Error checking withdrawal status:", error);
+    return false;
+  }
+};
+
 // Fetch campaign data from the blockchain
 export const fetchCampaignData = async (
   suiClient: SuiClient,
@@ -276,6 +309,23 @@ export const createRefundTransaction = (
       tx.object(receiptId),
     ],
     target: `${packageId}::crowd::refund`,
+  });
+  
+  return tx;
+};
+
+// Create transaction to force finalize a campaign (for testing)
+export const createForceSucceededTransaction = (
+  packageId: string,
+  campaignId: string
+): Transaction => {
+  const tx = new Transaction();
+  
+  tx.moveCall({
+    arguments: [
+      tx.object(campaignId),
+    ],
+    target: `${packageId}::crowd::force_succeeded`,
   });
   
   return tx;

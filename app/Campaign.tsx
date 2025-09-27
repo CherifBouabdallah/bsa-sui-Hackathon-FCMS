@@ -11,6 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { useNetworkVariable } from "./networkConfig";
+// import { MoneyFlowVerification } from "./components/MoneyFlowVerification";
+import { checkIfFundsWithdrawn } from "./lib/blockchain";
 import { useState, useEffect } from "react";
 import ClipLoader from "react-spinners/ClipLoader";
 
@@ -66,6 +68,8 @@ export function Campaign({ id }: { id: string }) {
   const [donationAmount, setDonationAmount] = useState("");
   const [waitingForTxn, setWaitingForTxn] = useState("");
   const [currentTime, setCurrentTime] = useState<number | null>(null);
+  const [fundsWithdrawn, setFundsWithdrawn] = useState<boolean>(false);
+  const [checkingWithdrawal, setCheckingWithdrawal] = useState<boolean>(false);
 
   // Set current time on client side only to prevent hydration errors
   useEffect(() => {
@@ -81,6 +85,28 @@ export function Campaign({ id }: { id: string }) {
   });
 
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+
+  // Check if funds have been withdrawn when component loads or data changes
+  useEffect(() => {
+    const checkWithdrawalStatus = async () => {
+      if (data?.data) {
+        const campaignFields = getCampaignFields(data.data);
+        if (campaignFields && campaignFields.state === 1) {
+          setCheckingWithdrawal(true);
+          try {
+            const withdrawn = await checkIfFundsWithdrawn(suiClient, id);
+            setFundsWithdrawn(withdrawn);
+          } catch (error) {
+            console.error("Error checking withdrawal status:", error);
+          } finally {
+            setCheckingWithdrawal(false);
+          }
+        }
+      }
+    };
+
+    checkWithdrawalStatus();
+  }, [data?.data, suiClient, id]);
 
   const executeMove = (
     action: string,
@@ -151,6 +177,27 @@ export function Campaign({ id }: { id: string }) {
         target: `${crowdfundingPackageId}::crowd::withdraw`,
       });
       return tx;
+    }, async () => {
+      // On successful withdrawal, check the blockchain state
+      try {
+        const withdrawn = await checkIfFundsWithdrawn(suiClient, id);
+        setFundsWithdrawn(withdrawn);
+      } catch (error) {
+        console.error("Error checking withdrawal status after transaction:", error);
+        // Fallback: assume withdrawal was successful
+        setFundsWithdrawn(true);
+      }
+    });
+  };
+
+  const forceFinalizeCampaign = () => {
+    executeMove("force_finalize", () => {
+      const tx = new Transaction();
+      tx.moveCall({
+        arguments: [tx.object(id)],
+        target: `${crowdfundingPackageId}::crowd::force_succeeded`,
+      });
+      return tx;
     });
   };
 
@@ -181,20 +228,21 @@ export function Campaign({ id }: { id: string }) {
   const state = getStateLabel(campaignFields.state);
 
   return (
-    <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
-      <CardHeader>
-        <div className="flex justify-between items-start">
-          <div>
-            <CardTitle className="text-gray-900 text-xl">{metadata.title}</CardTitle>
-            <CardDescription className="text-gray-600 mt-2">
-              {metadata.description}
-            </CardDescription>
+    <div className="space-y-6">
+      <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
+        <CardHeader>
+          <div className="flex justify-between items-start">
+            <div>
+              <CardTitle className="text-gray-900 text-xl">{metadata.title}</CardTitle>
+              <CardDescription className="text-gray-600 mt-2">
+                {metadata.description}
+              </CardDescription>
+            </div>
+            <div className={`px-3 py-1 rounded-full text-sm font-medium ${state.color} bg-gray-100`}>
+              {state.label}
+            </div>
           </div>
-          <div className={`px-3 py-1 rounded-full text-sm font-medium ${state.color} bg-gray-100`}>
-            {state.label}
-          </div>
-        </div>
-      </CardHeader>
+        </CardHeader>
       
       <CardContent className="space-y-6">
         {metadata.imageUrl && (
@@ -264,6 +312,32 @@ export function Campaign({ id }: { id: string }) {
                 )}
               </Button>
             </div>
+
+            {/* Testing buttons for campaign owner */}
+            {isOwner && (
+              <div className="border-t pt-3 mt-4">
+                <p className="text-sm text-gray-600 mb-2">🧪 Testing Controls (Owner Only):</p>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={forceFinalizeCampaign}
+                    disabled={waitingForTxn !== ""}
+                    className="text-white px-4 text-sm"
+                    style={{ backgroundColor: '#F59E0B' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D97706'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F59E0B'}
+                  >
+                    {waitingForTxn === "force_finalize" ? (
+                      <ClipLoader size={14} color="white" />
+                    ) : (
+                      "🏁 Finish Campaign Now"
+                    )}
+                  </Button>
+                  <span className="text-xs text-gray-500 self-center">
+                    Forces campaign to succeed for testing withdrawals
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -287,27 +361,87 @@ export function Campaign({ id }: { id: string }) {
 
         {/* Withdrawal (for successful campaigns by owner) */}
         {campaignFields.state === 1 && isOwner && (
-          <Button
-            onClick={withdrawFunds}
-            disabled={waitingForTxn !== ""}
-            className="w-full text-white"
-            style={{ backgroundColor: '#963B6B' }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#7A2F56'}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#963B6B'}
-          >
-            {waitingForTxn === "withdraw" ? (
-              <ClipLoader size={16} color="white" />
-            ) : (
-              "Withdraw Funds"
+          <div className={`border rounded-lg p-4 space-y-3 ${
+            fundsWithdrawn 
+              ? 'bg-gray-50 border-gray-300' 
+              : 'bg-green-50 border-green-200'
+          }`}>
+            <div className="text-center">
+              {checkingWithdrawal ? (
+                <>
+                  <div className="flex items-center justify-center space-x-2">
+                    <ClipLoader size={16} color="#6B7280" />
+                    <span className="text-gray-600">Checking withdrawal status...</span>
+                  </div>
+                </>
+              ) : fundsWithdrawn ? (
+                <>
+                  <h3 className="text-lg font-semibold text-gray-800">✅ Funds Already Withdrawn!</h3>
+                  <p className="text-sm text-gray-700">
+                    You have successfully withdrawn <span className="font-bold">{raisedSui} SUI</span> from this campaign.
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Treasury is now empty. Multiple withdrawals are prevented by the smart contract.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-semibold text-green-800">🎉 Campaign Succeeded!</h3>
+                  <p className="text-sm text-green-700">
+                    You can now withdraw the funds raised: <span className="font-bold">{raisedSui} SUI</span>
+                  </p>
+                </>
+              )}
+            </div>
+            {!checkingWithdrawal && !fundsWithdrawn && (
+              <Button
+                onClick={withdrawFunds}
+                disabled={waitingForTxn !== ""}
+                className="w-full text-white text-lg py-3"
+                style={{ backgroundColor: '#059669' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#047857'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#059669'}
+              >
+                {waitingForTxn === "withdraw" ? (
+                  <ClipLoader size={16} color="white" />
+                ) : (
+                  "💰 Withdraw Funds to Your Wallet"
+                )}
+              </Button>
             )}
-          </Button>
+            {!checkingWithdrawal && fundsWithdrawn && (
+              <Button
+                disabled={true}
+                className="w-full text-gray-500 bg-gray-300 cursor-not-allowed text-lg py-3"
+              >
+                💳 Funds Already Withdrawn
+              </Button>
+            )}
+            {checkingWithdrawal && (
+              <Button
+                disabled={true}
+                className="w-full text-gray-500 bg-gray-200 cursor-not-allowed text-lg py-3"
+              >
+                <ClipLoader size={16} color="#6B7280" className="mr-2" />
+                Checking Status...
+              </Button>
+            )}
+            <p className="text-xs text-green-600 text-center">
+              Funds will be transferred directly to your wallet address: 
+              <br />
+              <code className="bg-green-100 px-2 py-1 rounded text-xs">
+                {campaignFields.owner.slice(0, 20)}...{campaignFields.owner.slice(-10)}
+              </code>
+            </p>
+          </div>
         )}
 
-        {/* Status Messages */}
-        {campaignFields.state === 1 && (
+        {/* Status Messages for Non-Owners */}
+        {campaignFields.state === 1 && !isOwner && (
           <Alert>
             <AlertDescription className="text-green-700">
-              🎉 Campaign succeeded! Goal reached.
+              🎉 Campaign succeeded! Goal reached. The campaign owner can now withdraw the funds.
+              You can track the withdrawal in the Money Flow Verification section below.
             </AlertDescription>
           </Alert>
         )}
@@ -315,11 +449,22 @@ export function Campaign({ id }: { id: string }) {
         {campaignFields.state === 2 && (
           <Alert>
             <AlertDescription className="text-red-700">
-              Campaign failed to reach its goal. Donors can request refunds using their donation receipts.
+              ❌ Campaign failed to reach its goal. If you donated, you can request refunds using your donation receipts.
+              Visit the "Donation Receipts" page to process your refund.
             </AlertDescription>
           </Alert>
         )}
       </CardContent>
     </Card>
+
+    {/* Money Flow Verification Section */}
+    {/* <MoneyFlowVerification 
+      campaignId={id}
+      campaignOwner={campaignFields.owner}
+    /> */}
+    <div className="text-center text-gray-500 p-8">
+      Money Flow Verification temporarily disabled for debugging
+    </div>
+  </div>
   );
 }
