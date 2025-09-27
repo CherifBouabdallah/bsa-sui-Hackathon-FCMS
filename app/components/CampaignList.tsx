@@ -34,14 +34,17 @@ export function CampaignList({ onSelectCampaign }: { onSelectCampaign: (id: stri
                 value={campaignId}
                 onChange={(e) => setCampaignId(e.target.value)}
                 placeholder="0x1234567890abcdef..."
-                className="font-mono text-sm"
+                className="font-mono text-sm border-gray-300"
               />
             </div>
             
             <Button
               type="submit"
               disabled={!isValidSuiObjectId(campaignId)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              className="w-full text-white"
+              style={{ backgroundColor: '#963B6B' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#7A2F56'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#963B6B'}
             >
               View Campaign
             </Button>

@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { useNetworkVariable } from "./networkConfig";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ClipLoader from "react-spinners/ClipLoader";
 
 interface CampaignFields {
@@ -65,6 +65,12 @@ export function Campaign({ id }: { id: string }) {
   const suiClient = useSuiClient();
   const [donationAmount, setDonationAmount] = useState("");
   const [waitingForTxn, setWaitingForTxn] = useState("");
+  const [currentTime, setCurrentTime] = useState<number | null>(null);
+
+  // Set current time on client side only to prevent hydration errors
+  useEffect(() => {
+    setCurrentTime(Date.now());
+  }, []);
 
   const { data, isPending, error, refetch } = useSuiClientQuery("getObject", {
     id,
@@ -171,7 +177,7 @@ export function Campaign({ id }: { id: string }) {
   const raisedSui = formatSui(campaignFields.raised);
   const progressPercentage = (parseInt(campaignFields.raised) / parseInt(campaignFields.goal)) * 100;
   const deadline = new Date(parseInt(campaignFields.deadline_ms));
-  const isExpired = Date.now() > deadline.getTime();
+  const isExpired = currentTime ? currentTime > deadline.getTime() : false;
   const state = getStateLabel(campaignFields.state);
 
   return (
@@ -207,8 +213,8 @@ export function Campaign({ id }: { id: string }) {
           </div>
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
-              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${Math.min(progressPercentage, 100)}%` }}
+              className="h-2 rounded-full transition-all duration-300"
+              style={{ backgroundColor: '#963B6B', width: `${Math.min(progressPercentage, 100)}%` }}
             ></div>
           </div>
           <p className="text-sm text-gray-600 mt-1">
@@ -241,12 +247,15 @@ export function Campaign({ id }: { id: string }) {
                 value={donationAmount}
                 onChange={(e) => setDonationAmount(e.target.value)}
                 placeholder="Amount in SUI"
-                className="flex-1"
+                className="flex-1 border-gray-300"
               />
               <Button
                 onClick={donate}
                 disabled={waitingForTxn !== "" || !donationAmount || parseFloat(donationAmount) <= 0}
-                className="bg-green-600 hover:bg-green-700 text-white min-w-[100px]"
+                className="text-white min-w-[100px]"
+                style={{ backgroundColor: '#963B6B' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#7A2F56'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#963B6B'}
               >
                 {waitingForTxn === "donate" ? (
                   <ClipLoader size={16} color="white" />
@@ -263,7 +272,10 @@ export function Campaign({ id }: { id: string }) {
           <Button
             onClick={finalizeCampaign}
             disabled={waitingForTxn !== ""}
-            className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+            className="w-full text-white"
+            style={{ backgroundColor: '#963B6B' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#7A2F56'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#963B6B'}
           >
             {waitingForTxn === "finalize" ? (
               <ClipLoader size={16} color="white" />
@@ -278,7 +290,10 @@ export function Campaign({ id }: { id: string }) {
           <Button
             onClick={withdrawFunds}
             disabled={waitingForTxn !== ""}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+            className="w-full text-white"
+            style={{ backgroundColor: '#963B6B' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#7A2F56'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#963B6B'}
           >
             {waitingForTxn === "withdraw" ? (
               <ClipLoader size={16} color="white" />

@@ -1,7 +1,6 @@
 import "@mysten/dapp-kit/dist/index.css";
 import "./globals.css";
 import { Providers } from "./providers";
-import Navbar from "./components/Navbar";
 
 export default function RootLayout({
   children,
@@ -9,16 +8,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <head>
         <meta charSet="UTF-8" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                <title>Crowdfunding Platform - Sui Blockchain</title>
+        <title>Crowdfunding Platform - Sui Blockchain</title>
       </head>
-      <body>
+      <body suppressHydrationWarning={true}>
         <Providers>
-          <Navbar />
           {children}
         </Providers>
       </body>

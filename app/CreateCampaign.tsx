@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Transaction } from "@mysten/sui/transactions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,12 @@ export function CreateCampaign({
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [minDateTime, setMinDateTime] = useState("");
+
+  // Set minimum datetime on client side only to prevent hydration errors
+  useEffect(() => {
+    setMinDateTime(new Date().toISOString().slice(0, 16));
+  }, []);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -144,7 +150,7 @@ export function CreateCampaign({
             value={formData.title}
             onChange={(e) => handleInputChange("title", e.target.value)}
             placeholder="Enter campaign title"
-            className={errors.title ? "border-red-500" : ""}
+            className={errors.title ? "border-red-500" : "border-gray-300"}
           />
           {errors.title && <p className="text-red-500 text-sm mt-1">{errors.title}</p>}
         </div>
@@ -159,7 +165,8 @@ export function CreateCampaign({
             onChange={(e) => handleInputChange("description", e.target.value)}
             placeholder="Describe your campaign and what you're raising funds for"
             rows={4}
-            className={`flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${errors.description ? "border-red-500" : ""}`}
+            className={`flex min-h-[80px] w-full rounded-md border border-input bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${errors.description ? "border-red-500" : "border-gray-300"}`}
+            style={{ '--tw-ring-color': '#963B6B' } as React.CSSProperties}
           />
           {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
         </div>
@@ -176,7 +183,7 @@ export function CreateCampaign({
             value={formData.goal}
             onChange={(e) => handleInputChange("goal", e.target.value)}
             placeholder="Enter funding goal in SUI"
-            className={errors.goal ? "border-red-500" : ""}
+            className={errors.goal ? "border-red-500" : "border-gray-300"}
           />
           {errors.goal && <p className="text-red-500 text-sm mt-1">{errors.goal}</p>}
         </div>
@@ -190,8 +197,8 @@ export function CreateCampaign({
             type="datetime-local"
             value={formData.deadline}
             onChange={(e) => handleInputChange("deadline", e.target.value)}
-            min={new Date().toISOString().slice(0, 16)}
-            className={errors.deadline ? "border-red-500" : ""}
+            min={minDateTime}
+            className={errors.deadline ? "border-red-500" : "border-gray-300"}
           />
           {errors.deadline && <p className="text-red-500 text-sm mt-1">{errors.deadline}</p>}
         </div>
@@ -206,6 +213,7 @@ export function CreateCampaign({
             value={formData.imageUrl}
             onChange={(e) => handleInputChange("imageUrl", e.target.value)}
             placeholder="Enter image URL for your campaign"
+            className="border-gray-300"
           />
         </div>
 
@@ -213,7 +221,11 @@ export function CreateCampaign({
           size="lg"
           onClick={createCampaign}
           disabled={isSuccess || isPending}
-          className="w-full text-white bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
+          className="w-full text-white disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 transform hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl"
+          style={{ backgroundColor: '#963B6B' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#7A2F56'}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#963B6B'}
+          onMouseDown={(e) => e.currentTarget.style.backgroundColor = '#6B2344'}
         >
           {isSuccess || isPending ? (
             <ClipLoader size={20} color="white" />

@@ -2,7 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ConnectButton } from "@mysten/dapp-kit";
+import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
+import { Button } from "./ui/button";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -31,63 +32,112 @@ const components: { title: string; href: string; description: string }[] = [
   },
 ];
 
-export default function Navbar() {
+interface NavbarProps {
+  view?: 'welcome' | 'create' | 'search' | 'receipts' | 'campaign';
+  onViewChange?: (view: 'welcome' | 'create' | 'search' | 'receipts' | 'campaign') => void;
+  onGoHome?: () => void;
+}
+
+export default function Navbar({ view, onViewChange, onGoHome }: NavbarProps) {
+  const currentAccount = useCurrentAccount();
+
   return (
-    <NavigationMenu className="max-w-full justify-between p-4 bg-white border-b border-gray-200">
-      <NavigationMenuList className="flex w-full justify-between items-center">
-        <div className="flex items-center space-x-6">
-          <NavigationMenuItem>
-            <NavigationMenuLink asChild>
-              <Link href="/" className="flex items-center space-x-2 font-semibold text-lg text-gray-900">
-                Crowdfunding Platform
-              </Link>
-            </NavigationMenuLink>
-          </NavigationMenuItem>
-          
-          <NavigationMenuItem>
-            <NavigationMenuTrigger className="text-gray-900">Features</NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <ul className="grid gap-3 p-6 md:w-[400px] lg:w-[500px] lg:grid-cols-[.75fr_1fr] bg-white">
-                <li className="row-span-3">
-                  <NavigationMenuLink asChild>
-                    <Link
-                      className="flex h-full w-full select-none flex-col justify-end rounded-md bg-gradient-to-b from-slate-50 to-slate-100 p-6 no-underline outline-none focus:shadow-md"
-                      href="/"
-                    >
-                      <div className="mb-2 mt-4 text-lg font-medium text-gray-900">
-                        Crowdfunding Platform
-                      </div>
-                      <p className="text-sm leading-tight text-slate-600">
-                        A decentralized crowdfunding platform built with Sui blockchain.
-                      </p>
-                    </Link>
-                  </NavigationMenuLink>
-                </li>
-                {components.map((component) => (
-                  <ListItem
-                    key={component.title}
-                    title={component.title}
-                    href={component.href}
-                  >
-                    {component.description}
-                  </ListItem>
-                ))}
-              </ul>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
+    <div className="sticky top-0 z-50 w-full" style={{ backgroundColor: '#061E37' }}>
+      <div className="w-full px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col sm:flex-row justify-between items-center h-auto sm:h-16 py-2 sm:py-0 gap-2 sm:gap-4">
+          {/* Left side - Brand and Home */}
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="ghost"
+              onClick={onGoHome}
+              className="text-lg font-semibold text-white p-0"
+              style={{ color: 'white' }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#963B6B'}
+              onMouseLeave={(e) => e.currentTarget.style.color = 'white'}
+            >
+              👑 <span className="hidden sm:inline ml-1">CrownFunding</span>
+            </Button>
+          </div>
 
-          <NavigationMenuItem>
-            <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
-              <Link href="/" className="text-gray-900">Home</Link>
-            </NavigationMenuLink>
-          </NavigationMenuItem>
+          {/* Center - App Navigation (only show when logged in) */}
+          {currentAccount && onViewChange && (
+            <div className="flex flex-wrap justify-center space-x-1 sm:space-x-2">
+              <Button
+                variant={view === 'create' ? 'default' : 'ghost'}
+                onClick={() => onViewChange('create')}
+                className={`text-xs sm:text-sm ${
+                  view === 'create'
+                    ? 'text-white'
+                    : 'text-white'
+                }`}
+                style={view === 'create' ? { backgroundColor: '#963B6B' } : {}}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#963B6B';
+                }}
+                onMouseLeave={(e) => {
+                  if (view === 'create') {
+                    e.currentTarget.style.backgroundColor = '#963B6B';
+                  } else {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                ✨ <span className="hidden sm:inline ml-1">Create Campaign</span><span className="sm:hidden ml-1">Create</span>
+              </Button>
+              <Button
+                variant={view === 'search' ? 'default' : 'ghost'}
+                onClick={() => onViewChange('search')}
+                className={`text-xs sm:text-sm ${
+                  view === 'search'
+                    ? 'text-white'
+                    : 'text-white'
+                }`}
+                style={view === 'search' ? { backgroundColor: '#963B6B' } : {}}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#963B6B';
+                }}
+                onMouseLeave={(e) => {
+                  if (view === 'search') {
+                    e.currentTarget.style.backgroundColor = '#963B6B';
+                  } else {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                🔍 <span className="hidden sm:inline ml-1">Find Campaign</span><span className="sm:hidden ml-1">Find</span>
+              </Button>
+              <Button
+                variant={view === 'receipts' ? 'default' : 'ghost'}
+                onClick={() => onViewChange('receipts')}
+                className={`text-xs sm:text-sm ${
+                  view === 'receipts'
+                    ? 'text-white'
+                    : 'text-white'
+                }`}
+                style={view === 'receipts' ? { backgroundColor: '#963B6B' } : {}}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#963B6B';
+                }}
+                onMouseLeave={(e) => {
+                  if (view === 'receipts') {
+                    e.currentTarget.style.backgroundColor = '#963B6B';
+                  } else {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                📋 <span className="hidden sm:inline ml-1">My Donations</span><span className="sm:hidden ml-1">Donations</span>
+              </Button>
+            </div>
+          )}
+
+          {/* Right side - Wallet Connection */}
+          <div className="flex items-center">
+            <ConnectButton />
+          </div>
         </div>
-
-        <NavigationMenuItem className="flex ml-auto">
-          <ConnectButton />
-        </NavigationMenuItem>
-      </NavigationMenuList>
-    </NavigationMenu>
+      </div>
+    </div>
   );
 }
 
