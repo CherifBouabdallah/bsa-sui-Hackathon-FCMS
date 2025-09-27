@@ -11,7 +11,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { useNetworkVariable } from "./networkConfig";
-// import { MoneyFlowVerification } from "./components/MoneyFlowVerification";
 import { checkIfFundsWithdrawn } from "./lib/blockchain";
 import { useState, useEffect } from "react";
 import ClipLoader from "react-spinners/ClipLoader";
@@ -190,17 +189,6 @@ export function Campaign({ id }: { id: string }) {
     });
   };
 
-  const forceFinalizeCampaign = () => {
-    executeMove("force_finalize", () => {
-      const tx = new Transaction();
-      tx.moveCall({
-        arguments: [tx.object(id)],
-        target: `${crowdfundingPackageId}::crowd::force_succeeded`,
-      });
-      return tx;
-    });
-  };
-
   if (isPending) return <div className="p-4">Loading campaign...</div>;
 
   if (error) {
@@ -227,6 +215,9 @@ export function Campaign({ id }: { id: string }) {
   const isExpired = currentTime ? currentTime > deadline.getTime() : false;
   const state = getStateLabel(campaignFields.state);
 
+  // Add warning if state doesn't match reality
+  const hasInconsistentState = campaignFields.state === 1 && parseInt(campaignFields.raised) < parseInt(campaignFields.goal);
+
   return (
     <div className="space-y-6">
       <Card className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -251,6 +242,16 @@ export function Campaign({ id }: { id: string }) {
             alt={metadata.title}
             className="w-full h-48 object-cover rounded-lg"
           />
+        )}
+
+        {/* Warning for inconsistent state */}
+        {hasInconsistentState && (
+          <Alert className="border-yellow-400 bg-yellow-50">
+            <AlertDescription className="text-yellow-800">
+              ⚠️ This campaign was marked as succeeded using a testing function, but the goal was not actually reached. 
+              In production, this would only happen if the goal was met.
+            </AlertDescription>
+          </Alert>
         )}
 
         {/* Progress Section */}
@@ -313,31 +314,7 @@ export function Campaign({ id }: { id: string }) {
               </Button>
             </div>
 
-            {/* Testing buttons for campaign owner */}
-            {isOwner && (
-              <div className="border-t pt-3 mt-4">
-                <p className="text-sm text-gray-600 mb-2">🧪 Testing Controls (Owner Only):</p>
-                <div className="flex gap-2">
-                  <Button
-                    onClick={forceFinalizeCampaign}
-                    disabled={waitingForTxn !== ""}
-                    className="text-white px-4 text-sm"
-                    style={{ backgroundColor: '#F59E0B' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D97706'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F59E0B'}
-                  >
-                    {waitingForTxn === "force_finalize" ? (
-                      <ClipLoader size={14} color="white" />
-                    ) : (
-                      "🏁 Finish Campaign Now"
-                    )}
-                  </Button>
-                  <span className="text-xs text-gray-500 self-center">
-                    Forces campaign to succeed for testing withdrawals
-                  </span>
-                </div>
-              </div>
-            )}
+            {/* REMOVED: Testing buttons that were causing the bug */}
           </div>
         )}
 
@@ -441,7 +418,6 @@ export function Campaign({ id }: { id: string }) {
           <Alert>
             <AlertDescription className="text-green-700">
               🎉 Campaign succeeded! Goal reached. The campaign owner can now withdraw the funds.
-              You can track the withdrawal in the Money Flow Verification section below.
             </AlertDescription>
           </Alert>
         )}
@@ -457,11 +433,7 @@ export function Campaign({ id }: { id: string }) {
       </CardContent>
     </Card>
 
-    {/* Money Flow Verification Section */}
-    {/* <MoneyFlowVerification 
-      campaignId={id}
-      campaignOwner={campaignFields.owner}
-    /> */}
+    {/* Money Flow Verification Section - temporarily disabled */}
     <div className="text-center text-gray-500 p-8">
       Money Flow Verification temporarily disabled for debugging
     </div>

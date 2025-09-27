@@ -22,6 +22,7 @@ interface CampaignData {
     description?: string;
     imageUrl?: string;
   };
+  slug?: string; // Add slug field
 }
 
 interface CampaignListProps {
@@ -41,6 +42,15 @@ const parseMetadata = (cidBytes: number[]): any => {
   } catch {
     return { title: "Campaign", description: "No description available" };
   }
+};
+
+// Create URL-friendly slug from title
+const createSlug = (title: string): string => {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 50); // Limit length
 };
 
 const getCampaignStateLabel = (state: number): string => {
@@ -70,14 +80,37 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
   const [error, setError] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<'all' | 'active' | 'succeeded' | 'failed'>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'mostFunded' | 'endingSoon'>('newest');
-
+  
   const suiClient = useSuiClient();
   const packageId = DEVNET_CROWDFUNDING_PACKAGE_ID;
 
-  // Debug: Check if callback is passed
+  // Create a map of slugs to campaign IDs for quick lookup
+  const slugToCampaignId = useMemo(() => {
+    const map = new Map<string, string>();
+    campaigns.forEach(campaign => {
+      if (campaign.slug) {
+        map.set(campaign.slug, campaign.id);
+      }
+    });
+    return map;
+  }, [campaigns]);
+
+  // Export campaigns data to parent component if needed
   useEffect(() => {
-    console.log('CampaignList mounted. onSelectCampaign exists?', !!onSelectCampaign);
-  }, [onSelectCampaign]);
+    // Store campaigns in localStorage for App.tsx to access
+    if (campaigns.length > 0) {
+      const campaignMap = campaigns.reduce((acc, campaign) => {
+        if (campaign.slug) {
+          acc[campaign.slug] = campaign.id;
+        }
+        // Also store by ID for direct access
+        acc[campaign.id] = campaign.id;
+        return acc;
+      }, {} as Record<string, string>);
+      
+      localStorage.setItem('campaignMap', JSON.stringify(campaignMap));
+    }
+  }, [campaigns]);
 
   // Fetch campaigns
   useEffect(() => {
@@ -99,14 +132,10 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
 
         console.log('Found events:', events.data.length);
 
-        
-
         const campaignPromises = events.data.map(async (event) => {
           if (event.parsedJson && typeof event.parsedJson === 'object') {
             const eventData = event.parsedJson as any;
             const campaignId = eventData.campaign;
-            
-            console.log('Fetching campaign:', campaignId);
             
             if (campaignId) {
               try {
@@ -122,7 +151,8 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
                   const fields = (object.data.content as any).fields;
                   const metadata = fields.metadata_cid ? parseMetadata(fields.metadata_cid) : {};
                   
-                  console.log('Campaign fetched:', campaignId, metadata.title);
+                  // Create slug from title
+                  const slug = metadata.title ? createSlug(metadata.title) : undefined;
                   
                   return {
                     id: campaignId,
@@ -132,6 +162,7 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
                     raised: fields.raised || "0",
                     state: fields.state,
                     metadata,
+                    slug,
                   };
                 }
               } catch (err) {
@@ -150,8 +181,6 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
       } catch (err) {
         console.error('Failed to fetch campaigns:', err);
         setError('Failed to load campaigns. Please try again.');
-        
-        
       } finally {
         setLoading(false);
       }
@@ -174,13 +203,14 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
       filtered = filtered.filter(c => c.state === stateMap[filterState]);
     }
 
-    // Apply search filter
+    // Apply search filter - now also searches by slug
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(c => 
         c.metadata.title?.toLowerCase().includes(term) ||
         c.metadata.description?.toLowerCase().includes(term) ||
-        c.id.toLowerCase().includes(term)
+        c.id.toLowerCase().includes(term) ||
+        c.slug?.includes(term)
       );
     }
 
@@ -200,35 +230,57 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
     return filtered;
   }, [campaigns, filterState, searchTerm, sortBy]);
 
-  // Fixed handler for viewing campaigns
-  const handleViewCampaign = (campaignId?: string) => {
-    const id = campaignId || selectedCampaignId.trim();
+  // Handler for viewing campaigns - now supports both ID and name/slug
+  const handleViewCampaign = (campaignIdOrSlug?: string) => {
+    const input = campaignIdOrSlug || selectedCampaignId.trim();
     
-    if (!id) {
-      console.error('No campaign ID provided');
+    if (!input) {
+      console.error('No campaign ID or name provided');
       return;
     }
 
-    console.log('Viewing campaign:', id);
-
+    // Check if input is a slug or an ID
+    let campaignId = input;
     
+    // If it doesn't look like an ID (0x...), try to find it as a slug
+    if (!input.startsWith('0x')) {
+      const possibleSlug = createSlug(input);
+      const idFromSlug = slugToCampaignId.get(possibleSlug);
+      
+      if (idFromSlug) {
+        campaignId = idFromSlug;
+        console.log('Found campaign by slug:', possibleSlug, '->', campaignId);
+      } else {
+        // Try to find by partial title match
+        const matchingCampaign = campaigns.find(c => 
+          c.metadata.title?.toLowerCase().includes(input.toLowerCase())
+        );
+        
+        if (matchingCampaign) {
+          campaignId = matchingCampaign.id;
+          console.log('Found campaign by title match:', input, '->', campaignId);
+        } else {
+          alert(`Campaign not found: "${input}". Try using the campaign ID or exact title.`);
+          return;
+        }
+      }
+    }
+
+    console.log('Viewing campaign:', campaignId);
     
     // Call the callback if it exists
     if (onSelectCampaign) {
-      console.log('Calling onSelectCampaign with ID:', id);
-      onSelectCampaign(id);
+      console.log('Calling onSelectCampaign with ID:', campaignId);
+      onSelectCampaign(campaignId);
     } else {
       // Fallback: directly manipulate the URL if no callback provided
       console.log('No onSelectCampaign callback, using direct navigation');
       if (typeof window !== 'undefined') {
-        window.location.hash = id;
-        // Force a page reload to trigger the campaign view
+        window.location.hash = campaignId;
         window.location.reload();
       }
     }
   };
-
-  
 
   // Helper functions for display
   const formatDate = (timestampMs: string) => {
@@ -282,8 +334,6 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
           </Button>
         ))}
       </div>
-      
-      
     </div>
   );
 
@@ -326,9 +376,6 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
         Discover Campaigns
       </h2>
       
-      
-      
-      
       {/* Stats Dashboard */}
       {!loading && campaigns.length > 0 && renderStats()}
       
@@ -353,7 +400,7 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
         {/* Filters */}
         {renderFilters()}
         
-        {/* Quick Access Card */}
+        {/* Quick Access Card - Now supports names! */}
         <Card className="border-purple-200 shadow-lg">
           <CardHeader>
             <CardTitle className="text-purple-700">⚡ Quick Campaign Access</CardTitle>
@@ -362,22 +409,22 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
             <div className="flex gap-3">
               <Input
                 type="text"
-                placeholder="Enter Campaign ID (e.g., 0x123...)"
+                placeholder="Enter Campaign Name or ID (e.g., 'DeFi Revolution' or 0x123...)"
                 value={selectedCampaignId}
                 onChange={(e) => setSelectedCampaignId(e.target.value)}
                 className="border-purple-300 focus:border-purple-500"
               />
               <Button 
-                onClick={() => {
-                  console.log('Quick access button clicked with ID:', selectedCampaignId);
-                  handleViewCampaign();
-                }}
+                onClick={() => handleViewCampaign()}
                 disabled={!selectedCampaignId.trim()}
                 className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6"
               >
                 View Campaign
               </Button>
             </div>
+            <p className="text-xs text-gray-500">
+              💡 Tip: You can search by campaign name or use the full ID
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -386,24 +433,21 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
       {loading && (
         <div className="text-center py-12">
           <ClipLoader size={40} color="#9333ea" />
-          <p className="text-gray-600 mt-4">Discovering amazing campaigns...</p>
+          <p className="text-gray-600 mt-4">Loading campaigns...</p>
         </div>
       )}
 
       {/* Error State */}
-      {error  && (
+      {error && (
         <Card className="border-red-200 shadow-lg mb-6">
           <CardContent className="py-6">
             <p className="text-red-600 text-center">⚠️ {error}</p>
-            <div className="flex gap-2 justify-center mt-4">
-              <Button 
-                onClick={() => window.location.reload()} 
-                className="bg-red-600 hover:bg-red-700 text-white"
-              >
-                Retry
-              </Button>
-              
-            </div>
+            <Button 
+              onClick={() => window.location.reload()} 
+              className="mt-4 mx-auto block bg-red-600 hover:bg-red-700 text-white"
+            >
+              Retry
+            </Button>
           </CardContent>
         </Card>
       )}
@@ -431,18 +475,15 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
                     ? `No ${filterState} campaigns found`
                     : 'No campaigns found'}
                 </p>
-                <div className="flex gap-2 justify-center">
-                  {searchTerm && (
-                    <Button 
-                      onClick={() => setSearchTerm('')}
-                      variant="outline"
-                      className="border-purple-300 text-purple-600 hover:bg-purple-50"
-                    >
-                      Clear Search
-                    </Button>
-                  )}
-              
-                </div>
+                {searchTerm && (
+                  <Button 
+                    onClick={() => setSearchTerm('')}
+                    variant="outline"
+                    className="border-purple-300 text-purple-600 hover:bg-purple-50"
+                  >
+                    Clear Search
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -450,26 +491,13 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
               {processedCampaigns.map((campaign) => {
                 const progress = getProgressPercentage(campaign.raised, campaign.goal);
                 const isExpired = parseInt(campaign.deadline_ms) < Date.now();
-                const isDemoCampaign = campaign.id.startsWith('0xdemo');
                 
                 return (
                   <Card 
                     key={campaign.id} 
-                    className={`border-purple-200 shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer transform hover:scale-105 overflow-hidden ${
-                      isDemoCampaign ? 'ring-2 ring-yellow-400' : ''
-                    }`}
-                    onClick={() => {
-                      console.log('Campaign card clicked:', campaign.id);
-                      handleViewCampaign(campaign.id);
-                    }}
+                    className="border-purple-200 shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer transform hover:scale-105 overflow-hidden"
+                    onClick={() => handleViewCampaign(campaign.id)}
                   >
-                    {/* Demo Badge */}
-                    {isDemoCampaign && (
-                      <div className="bg-yellow-400 text-yellow-900 text-xs font-bold text-center py-1">
-                        DEMO CAMPAIGN
-                      </div>
-                    )}
-                    
                     {/* Optional: Add image if exists */}
                     {campaign.metadata.imageUrl && (
                       <div className="h-48 w-full bg-gradient-to-r from-purple-100 to-pink-100 relative overflow-hidden">
@@ -535,6 +563,11 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
                         </div>
 
                         <div className="pt-2 border-t">
+                          {campaign.slug && (
+                            <div className="text-xs text-gray-500 mb-1">
+                              <span className="font-medium">Name:</span> {campaign.slug}
+                            </div>
+                          )}
                           <div className="text-xs text-gray-400 truncate">
                             <span className="font-medium">ID:</span> {campaign.id}
                           </div>
@@ -550,13 +583,11 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
       )}
 
       {/* Empty State for New Users */}
-      {!loading && !error && campaigns.length === 0 && !searchTerm  && (
+      {!loading && !error && campaigns.length === 0 && !searchTerm && (
         <div className="text-center py-12">
           <div className="text-6xl mb-4">🚀</div>
           <h3 className="text-2xl font-bold text-gray-800 mb-2">Be the First!</h3>
           <p className="text-gray-600 mb-6">No campaigns have been created yet. Start the revolution!</p>
-          <div className="flex gap-3 justify-center">
-          </div>
         </div>
       )}
     </div>
