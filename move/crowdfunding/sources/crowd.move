@@ -76,35 +76,38 @@ module crowdfunding::crowd {
     }
 
     /// Donate SUI to an active campaign. Mints a receipt to donor.
-    public entry fun donate(
-        c: &mut Campaign,
-        coins: Coin<SUI>,
-        clk: &Clock,
-        ctx: &mut TxContext
-    ) {
-        assert!(c.state == STATE_ACTIVE, 2);
-        let now = clock::timestamp_ms(clk);
-        assert!(now < c.deadline_ms, 3);
+   public entry fun donate(
+    c: &mut Campaign,
+    coins: Coin<SUI>,
+    ctx: &mut TxContext
+) {
+    // Vérifie que la campagne est active
+    assert!(c.state == STATE_ACTIVE, 2);
 
-        let amount = coin::value(&coins);
-        assert!(amount > 0, 4);
+    // Récupère l'heure actuelle
+    let now = clock::timestamp_ms();
+    assert!(now < c.deadline_ms, 3);
 
-        // Move coin into escrowed balance
-        let bal = coin::into_balance(coins);
-        balance::join(&mut c.treasury, bal);
-        c.raised = c.raised + amount;
+    let amount = coin::value(&coins);
+    assert!(amount > 0, 4);
 
-        // Mint receipt to donor
-        let receipt = DonationReceipt {
-            id: object::new(ctx),
-            campaign: object::uid_to_inner(&c.id),
-            donor: sender(ctx),
-            amount,
-            ts_ms: now,
-        };
-        event::emit(Donated { campaign: receipt.campaign, donor: receipt.donor, amount, ts_ms: now });
-        transfer::public_transfer(receipt, sender(ctx));
-    }
+    // Déplace la monnaie vers le trésor de la campagne
+    let bal = coin::into_balance(coins);
+    balance::join(&mut c.treasury, bal);
+    c.raised = c.raised + amount;
+
+    // Mint du reçu pour le donateur
+    let receipt = DonationReceipt {
+        id: object::new(ctx),
+        campaign: object::uid_to_inner(&c.id),
+        donor: sender(ctx),
+        amount,
+        ts_ms: now,
+    };
+    event::emit(Donated { campaign: receipt.campaign, donor: receipt.donor, amount, ts_ms: now });
+    transfer::public_transfer(receipt, sender(ctx));
+}
+
 
     /// Finalize after the deadline; sets Succeeded/Failed.
     public entry fun finalize(
