@@ -65,9 +65,13 @@ module crowdfunding::crowd {
         };
 
         let id = object::uid_to_inner(&c.id);
-        event::emit(CampaignCreated { campaign: id, owner: c.owner, goal: c.goal, deadline_ms: c.deadline_ms });
+        event::emit(CampaignCreated {
+            campaign: id,
+            owner: c.owner,
+            goal: c.goal,
+            deadline_ms: c.deadline_ms
+        });
 
-        // Share so anyone can donate.
         transfer::share_object(c);
     }
 
@@ -115,7 +119,8 @@ module crowdfunding::crowd {
             c.state = STATE_SUCCEEDED;
         } else {
             c.state = STATE_FAILED;
-        }
+        };
+
         event::emit(Finalized { campaign: object::uid_to_inner(&c.id), state: c.state, raised: c.raised });
     }
 
