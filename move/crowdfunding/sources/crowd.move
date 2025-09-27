@@ -1,12 +1,12 @@
 module crowdfunding::crowd {
     use sui::tx_context::{TxContext, sender};
-    use sui::object::{Self as Obj, UID, ID};
+    use sui::object::{Self as object, UID, ID};
     use sui::sui::SUI;
-    use sui::coin::{Self as Coin, Coin as SuiCoin};
-    use sui::balance::{Self as Balance, Balance as SuiBalance};
+    use sui::coin::{Self as coin, Coin};
+    use sui::balance::{Self as balance, Balance};
     use sui::transfer;
     use sui::event;
-    use sui::clock::{Self as Clock, Clock as SuiClock};
+    use sui::clock::{Self as clock, Clock};
 
     /// ---------- Constants ----------
     const STATE_ACTIVE: u8 = 0;
@@ -22,7 +22,7 @@ module crowdfunding::crowd {
         deadline_ms: u64,
         raised: u64,
         state: u8,
-        treasury: SuiBalance<SUI>,   // escrowed SUI
+        treasury: Balance<SUI>,      // escrowed SUI
         metadata_cid: vector<u8>,    // IPFS CID bytes
     }
 
@@ -54,17 +54,17 @@ module crowdfunding::crowd {
         assert!(deadline_ms > 0, 1);
 
         let c = Campaign {
-            id: Obj::new(ctx),
+            id: object::new(ctx),
             owner: sender(ctx),
             goal,
             deadline_ms,
             raised: 0,
             state: STATE_ACTIVE,
-            treasury: Balance::zero<SUI>(),
+            treasury: balance::zero<SUI>(),
             metadata_cid: cid,
         };
 
-        let id = Obj::uid_to_inner(&c.id);
+        let id = object::uid_to_inner(&c.id);
         event::emit(CampaignCreated { campaign: id, owner: c.owner, goal: c.goal, deadline_ms: c.deadline_ms });
 
         // Share so anyone can donate.
@@ -74,26 +74,26 @@ module crowdfunding::crowd {
     /// Donate SUI to an active campaign. Mints a receipt to donor.
     public entry fun donate(
         c: &mut Campaign,
-        mut coins: SuiCoin<SUI>,
-        clock: &SuiClock,
+        coins: Coin<SUI>,
+        clk: &Clock,
         ctx: &mut TxContext
     ) {
         assert!(c.state == STATE_ACTIVE, 2);
-        let now = Clock::timestamp_ms(clock);
+        let now = clock::timestamp_ms(clk);
         assert!(now < c.deadline_ms, 3);
 
-        let amount = Coin::value(&coins);
+        let amount = coin::value(&coins);
         assert!(amount > 0, 4);
 
         // Move coin into escrowed balance
-        let bal = Coin::into_balance(coins);
-        Balance::join(&mut c.treasury, bal);
+        let bal = coin::into_balance(coins);
+        balance::join(&mut c.treasury, bal);
         c.raised = c.raised + amount;
 
         // Mint receipt to donor
         let receipt = DonationReceipt {
-            id: Obj::new(ctx),
-            campaign: Obj::uid_to_inner(&c.id),
+            id: object::new(ctx),
+            campaign: object::uid_to_inner(&c.id),
             donor: sender(ctx),
             amount,
             ts_ms: now,
@@ -105,10 +105,10 @@ module crowdfunding::crowd {
     /// Finalize after the deadline; sets Succeeded/Failed.
     public entry fun finalize(
         c: &mut Campaign,
-        clock: &SuiClock
+        clk: &Clock
     ) {
         assert!(c.state == STATE_ACTIVE, 5);
-        let now = Clock::timestamp_ms(clock);
+        let now = clock::timestamp_ms(clk);
         assert!(now >= c.deadline_ms, 6);
 
         if (c.raised >= c.goal) {
@@ -116,7 +116,7 @@ module crowdfunding::crowd {
         } else {
             c.state = STATE_FAILED;
         }
-        event::emit(Finalized { campaign: Obj::uid_to_inner(&c.id), state: c.state, raised: c.raised });
+        event::emit(Finalized { campaign: object::uid_to_inner(&c.id), state: c.state, raised: c.raised });
     }
 
     /// Withdraw all funds to owner (only if succeeded).
@@ -127,16 +127,15 @@ module crowdfunding::crowd {
         assert!(c.state == STATE_SUCCEEDED, 7);
         assert!(sender(ctx) == c.owner, 8);
 
-        let amt = Balance::value(&c.treasury);
+        let amt = balance::value(&c.treasury);
         if (amt == 0) { return; };
 
-        // Split full amount out of treasury, convert to Coin, transfer
-        let (payout, remain) = Balance::split(&mut c.treasury, amt);
-        c.treasury = remain;
-        let coin = Coin::from_balance(payout, ctx);
+        // Take full amount out of treasury, convert to Coin, transfer
+        let payout: Balance<SUI> = balance::split(&mut c.treasury, amt);
+        let coin_out: Coin<SUI> = coin::from_balance(payout, ctx);
 
-        event::emit(Withdrawn { campaign: Obj::uid_to_inner(&c.id), to: c.owner, amount: amt });
-        transfer::public_transfer(coin, c.owner);
+        event::emit(Withdrawn { campaign: object::uid_to_inner(&c.id), to: c.owner, amount: amt });
+        transfer::public_transfer(coin_out, c.owner);
     }
 
     /// Refund the donor using their receipt (only if failed). Burns the receipt.
@@ -152,15 +151,14 @@ module crowdfunding::crowd {
 
         // Burn receipt
         let DonationReceipt { id, campaign: _, donor: _, amount: _, ts_ms: _ } = receipt;
-        Obj::delete(id);
+        object::delete(id);
 
         // Pay back from treasury
-        assert!(Balance::value(&c.treasury) >= amount, 10);
-        let (refund_bal, remain) = Balance::split(&mut c.treasury, amount);
-        c.treasury = remain;
-        let coin = Coin::from_balance(refund_bal, ctx);
+        assert!(balance::value(&c.treasury) >= amount, 10);
+        let refund_bal: Balance<SUI> = balance::split(&mut c.treasury, amount);
+        let coin_out: Coin<SUI> = coin::from_balance(refund_bal, ctx);
 
-        event::emit(Refunded { campaign: Obj::uid_to_inner(&c.id), to, amount });
-        transfer::public_transfer(coin, to);
+        event::emit(Refunded { campaign: object::uid_to_inner(&c.id), to, amount });
+        transfer::public_transfer(coin_out, to);
     }
 }
