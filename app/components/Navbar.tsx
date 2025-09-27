@@ -15,19 +15,19 @@ import {
 
 const components: { title: string; href: string; description: string }[] = [
   {
-    title: "Counter",
-    href: "/counter",
-    description: "View and interact with the counter component.",
+    title: "Campaigns",
+    href: "/campaigns",
+    description: "Browse and interact with crowdfunding campaigns.",
   },
   {
-    title: "Create Counter",
+    title: "Create Campaign",
     href: "/create",
-    description: "Create a new counter instance on the blockchain.",
+    description: "Launch a new crowdfunding campaign on the blockchain.",
   },
   {
     title: "About",
     href: "/about",
-    description: "Learn more about this counter application.",
+    description: "Learn more about this crowdfunding platform.",
   },
 ];
 
@@ -39,7 +39,7 @@ export default function Navbar() {
           <NavigationMenuItem>
             <NavigationMenuLink asChild>
               <Link href="/" className="flex items-center space-x-2 font-semibold text-lg text-gray-900">
-                Counter App
+                Crowdfunding Platform
               </Link>
             </NavigationMenuLink>
           </NavigationMenuItem>
@@ -55,10 +55,10 @@ export default function Navbar() {
                       href="/"
                     >
                       <div className="mb-2 mt-4 text-lg font-medium text-gray-900">
-                        Counter App
+                        Crowdfunding Platform
                       </div>
                       <p className="text-sm leading-tight text-slate-600">
-                        A beautiful counter application built with Next.js and Tailwind CSS.
+                        A decentralized crowdfunding platform built with Sui blockchain.
                       </p>
                     </Link>
                   </NavigationMenuLink>
