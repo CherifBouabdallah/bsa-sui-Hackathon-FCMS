@@ -129,57 +129,7 @@ export function CreateCampaign({
     }
   }
 
-  function createQuickTestCampaign() {
-    try {
-      // Create a campaign with an already expired deadline for immediate testing
-      const goalSui = 0.01; // Very small goal for easy testing  
-      const deadlineMs = Date.now() - (60 * 1000); // 1 minute ago (already expired)
-      
-      const tx = createCampaignTransaction(
-        crowdfundingPackageId,
-        goalSui,
-        deadlineMs,
-        "Test Campaign (Expired - Ready to Finalize)",
-        "Test campaign that's already expired and ready for immediate finalization and withdrawal testing",
-        undefined
-      );
 
-      // Validate transaction before signing
-      if (!tx || Object.keys(tx).length === 0) {
-        console.error('Invalid transaction: Transaction is empty or malformed');
-        return;
-      }
-
-      signAndExecute(
-        { transaction: tx },
-        {
-          onSuccess: async ({ digest }) => {
-            console.log('🚀 Test campaign created! Campaign is already expired - you can finalize it immediately!');
-            const { objectChanges } = await suiClient.waitForTransaction({
-              digest: digest,
-              options: {
-                showObjectChanges: true,
-              },
-            });
-
-            if (objectChanges) {
-              const createdCampaign = objectChanges.find(
-                (change) => change.type === "created"
-              );
-              if (createdCampaign && "objectId" in createdCampaign) {
-                onCreated(createdCampaign.objectId);
-              }
-            }
-          },
-          onError: (error) => {
-            console.error("Failed to create test campaign:", error);
-          },
-        }
-      );
-    } catch (error) {
-      console.error('Error creating test campaign transaction:', error);
-    }
-  }
 
   return (
     <Card className="max-w-2xl mx-auto">
@@ -283,25 +233,7 @@ export function CreateCampaign({
               "Create Campaign"
             )}
           </Button>
-          
-          {/* Testing helper */}
-          <div className="border-t pt-3">
-            <p className="text-sm text-gray-600 mb-2">🧪 Quick Testing:</p>
-            <Button
-              size="sm"
-              onClick={createQuickTestCampaign}
-              disabled={isSuccess || isPending}
-              className="w-full text-white text-sm"
-              style={{ backgroundColor: '#F59E0B' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D97706'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F59E0B'}
-            >
-              🚀 Create Test Campaign (Short Deadline)
-            </Button>
-            <p className="text-xs text-gray-500 mt-1">
-              Creates an already-expired campaign ready for immediate finalization & withdrawal testing
-            </p>
-          </div>
+
         </div>
       </CardContent>
     </Card>
