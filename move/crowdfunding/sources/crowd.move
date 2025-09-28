@@ -265,6 +265,31 @@ module crowdfunding::crowd {
         transfer::public_transfer(coin_out, to);
     }
 
+    /// ---------- Campaign Management Functions ----------
+    /// Cancel/Delete campaign (owner only, only if active and no donations)
+    public entry fun cancel_campaign(
+        c: &mut Campaign,
+        ctx: &mut TxContext
+    ) {
+        // Check sender is owner (for security)
+        assert!(sender(ctx) == c.owner, E_NOT_OWNER);
+        
+        // Check campaign is still active
+        assert!(c.state == STATE_ACTIVE, E_ALREADY_FINALIZED);
+        
+        // Check no donations have been made (can't cancel if people donated)
+        assert!(c.raised == 0, E_INSUFFICIENT_BALANCE); // Reusing error code for "has donations"
+
+        // Set state to failed to prevent any further interactions
+        c.state = STATE_FAILED;
+
+        event::emit(Finalized { 
+            campaign: object::uid_to_inner(&c.id), 
+            state: c.state, 
+            raised: c.raised 
+        });
+    }
+
     /// ---------- Testing Functions ----------
     /// Force campaign to succeed for testing purposes (owner only)
     public entry fun force_succeeded(

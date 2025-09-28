@@ -35,8 +35,8 @@ const components: { title: string; href: string; description: string }[] = [
 ];
 
 interface NavbarProps {
-  view?: 'welcome' | 'create' | 'search' | 'receipts' | 'campaign';
-  onViewChange?: (view: 'welcome' | 'create' | 'search' | 'receipts' | 'campaign') => void;
+  view?: 'welcome' | 'create' | 'search' | 'receipts' | 'my-campaigns' | 'campaign';
+  onViewChange?: (view: 'welcome' | 'create' | 'search' | 'receipts' | 'my-campaigns' | 'campaign') => void;
   onGoHome?: () => void;
   userName?: string | null;
   onUpdateName?: (name: string) => void;
@@ -133,6 +133,27 @@ export default function Navbar({ view, onViewChange, onGoHome, userName, onUpdat
               >
                 📋 <span className="hidden sm:inline ml-1">My Donations</span><span className="sm:hidden ml-1">Donations</span>
               </Button>
+              <Button
+                variant={view === 'my-campaigns' ? 'default' : 'ghost'}
+                onClick={() => onViewChange('my-campaigns')}
+                className={`text-xs sm:text-sm ${
+                  view === 'my-campaigns'
+                    ? 'text-white'
+                    : 'text-white'
+                }`}
+                style={view === 'my-campaigns' ? { backgroundColor: '#963B6B' } : {}}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = '#963B6B';
+                }}
+                onMouseLeave={(e) => {
+                  if (view === 'my-campaigns') {
+                    e.currentTarget.style.backgroundColor = '#963B6B';
+                  } else {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }
+                }}
+              >
+                👑 <span className="hidden sm:inline ml-1">My Campaigns</span><span className="sm:hidden ml-1">Mine</span></Button>
             </div>
           )}
 

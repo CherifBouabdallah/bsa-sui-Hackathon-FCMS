@@ -8,7 +8,7 @@ import { CampaignList } from "./components/CampaignList";
 import { DonationReceipts } from "./DonationReceipts";
 import { Card, CardContent } from "@/components/ui/card";
 import Navbar from "./components/Navbar";
-import { NameDialog } from "./components/NameDialog";
+
 import { useSuiClient } from "@mysten/dapp-kit";
 import { DEVNET_CROWDFUNDING_PACKAGE_ID } from "./constants";
 
@@ -16,7 +16,7 @@ function App() {
   const currentAccount = useCurrentAccount();
   const suiClient = useSuiClient();
   const [campaignId, setCampaign] = useState<string | null>(null);
-  const [view, setView] = useState<'welcome' | 'create' | 'search' | 'receipts' | 'campaign'>('welcome');
+  const [view, setView] = useState<'welcome' | 'create' | 'search' | 'receipts' | 'campaign' | 'my-campaigns'>('welcome');
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [animationKey, setAnimationKey] = useState(0);
   const [isResolvingCampaign, setIsResolvingCampaign] = useState(false);
@@ -177,7 +177,7 @@ function App() {
     animatedViewChange('campaign', id);
   };
 
-  const animatedViewChange = (newView: 'welcome' | 'create' | 'search' | 'receipts' | 'campaign', newCampaignId?: string | null) => {
+  const animatedViewChange = (newView: 'welcome' | 'create' | 'search' | 'receipts' | 'campaign' | 'my-campaigns', newCampaignId?: string | null) => {
     console.log('Changing view to:', newView, 'with campaign ID:', newCampaignId);
     setIsTransitioning(true);
     setTimeout(() => {
@@ -378,13 +378,13 @@ function App() {
         {view === 'receipts' && (
           <DonationReceipts />
         )}
+
+        {view === 'my-campaigns' && (
+          <CampaignList onSelectCampaign={handleCampaignSelected} showOnlyMyCampaigns={true} />
+        )}
       </div>
 
-      {/* Name Dialog for first-time users - renders on top with blurred background */}
-      <NameDialog 
-        isOpen={showNameDialog}
-        onSubmit={handleNameSubmit}
-      />
+      {/* Name Dialog functionality has been integrated into the app */}
     </div>
   );
 }

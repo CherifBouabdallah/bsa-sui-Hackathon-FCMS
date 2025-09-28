@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from './ui/card';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
-import { useSuiClient } from '@mysten/dapp-kit';
+import { useSuiClient, useCurrentAccount } from '@mysten/dapp-kit';
 import { DEVNET_CROWDFUNDING_PACKAGE_ID } from '../constants';
 import ClipLoader from 'react-spinners/ClipLoader';
 
@@ -27,6 +27,7 @@ interface CampaignData {
 
 interface CampaignListProps {
   onSelectCampaign?: (campaignId: string) => void;
+  showOnlyMyCampaigns?: boolean;
 }
 
 // Helper functions
@@ -71,7 +72,7 @@ const getCampaignStateColor = (state: number): string => {
   }
 };
 
-export function CampaignList({ onSelectCampaign }: CampaignListProps) {
+export function CampaignList({ onSelectCampaign, showOnlyMyCampaigns }: CampaignListProps) {
   // State management
   const [campaigns, setCampaigns] = useState<CampaignData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -82,6 +83,7 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
   const [sortBy, setSortBy] = useState<'newest' | 'mostFunded' | 'endingSoon'>('newest');
   
   const suiClient = useSuiClient();
+  const currentAccount = useCurrentAccount();
   const packageId = DEVNET_CROWDFUNDING_PACKAGE_ID;
 
   // Create a map of slugs to campaign IDs for quick lookup
@@ -193,6 +195,11 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
   const processedCampaigns = useMemo(() => {
     let filtered = [...campaigns];
 
+    // Apply owner filter for "My Campaigns"
+    if (showOnlyMyCampaigns && currentAccount?.address) {
+      filtered = filtered.filter(c => c.owner === currentAccount.address);
+    }
+
     // Apply state filter
     if (filterState !== 'all') {
       const stateMap = {
@@ -228,7 +235,7 @@ export function CampaignList({ onSelectCampaign }: CampaignListProps) {
     });
 
     return filtered;
-  }, [campaigns, filterState, searchTerm, sortBy]);
+  }, [campaigns, filterState, searchTerm, sortBy, showOnlyMyCampaigns, currentAccount?.address]);
 
   // Handler for viewing campaigns - now supports both ID and name/slug
   const handleViewCampaign = (campaignIdOrSlug?: string) => {

@@ -1,4 +1,4 @@
-// app/Campaign.tsx - Updated with MoneyFlowVerification enabled
+// app/Campaign.tsx - Updated with MoneyFlowVerification enabled and Delete Campaign functionality
 
 import {
   useCurrentAccount,
@@ -192,6 +192,8 @@ export function Campaign({ id }: { id: string }) {
               console.error('🚫 Error: Campaign has not succeeded (cannot withdraw)');
             } else if (errorMsg.includes('}, 8)')) {
               console.error('🚫 Error: You are not the campaign owner');
+            } else if (errorMsg.includes('}, 10)')) {
+              console.error('🚫 Error: Cannot delete campaign - donations have been made');
             }
           }
           
@@ -267,7 +269,31 @@ export function Campaign({ id }: { id: string }) {
     console.log("Current Account:", currentAccount?.address);
     console.log("Is Owner:", isOwner);
     console.log("Campaign State:", campaignFields?.state);
+    console.log("Campaign State Label:", getStateLabel(campaignFields?.state || 0));
     console.log("Raised Amount:", campaignFields?.raised);
+    console.log("Raised in SUI:", formatSui(campaignFields?.raised || "0"));
+    console.log("Package ID:", crowdfundingPackageId);
+    
+    // Pre-flight checks
+    if (!campaignFields) {
+      console.error("❌ No campaign data available");
+      return;
+    }
+    
+    if (campaignFields.state !== 1) {
+      console.error(`❌ Campaign state is ${campaignFields.state}, but needs to be 1 (SUCCEEDED) for withdrawal`);
+      return;
+    }
+    
+    if (!isOwner) {
+      console.error("❌ You are not the owner of this campaign");
+      return;
+    }
+    
+    if (fundsWithdrawn) {
+      console.error("❌ Funds have already been withdrawn");
+      return;
+    }
     
     executeMove("withdraw", () => {
       const tx = new Transaction();
@@ -284,10 +310,14 @@ export function Campaign({ id }: { id: string }) {
         const withdrawn = await checkIfFundsWithdrawn(suiClient, id);
         setFundsWithdrawn(withdrawn);
         console.log("💳 Withdrawal status updated:", withdrawn);
+        
+        // Show success message
+        alert(`🎉 Withdrawal successful!\n\n${formatSui(campaignFields?.raised || "0")} SUI has been transferred to your wallet.`);
       } catch (error) {
         console.error("Error checking withdrawal status after transaction:", error);
         // Fallback: assume withdrawal was successful
         setFundsWithdrawn(true);
+        alert(`✅ Withdrawal completed!\n\nFunds should be in your wallet now.`);
       }
     });
   };
@@ -301,14 +331,111 @@ export function Campaign({ id }: { id: string }) {
     console.log("Campaign deadline:", deadline.toLocaleString());
     console.log("Is expired:", isExpired);
     
-    // First try the new force_succeeded function
+    // Try force_succeeded first, with fallback to regular finalize
     executeMove("force_end", () => {
+      const tx = new Transaction();
+      try {
+        // Try the new force_succeeded function
+        tx.moveCall({
+          arguments: [tx.object(id)],
+          target: `${crowdfundingPackageId}::crowd::force_succeeded`,
+        });
+        console.log("💰 Using force_succeeded function");
+      } catch (error) {
+        console.log("⚠️ force_succeeded not available, using regular finalize");
+        // Fallback to regular finalize
+        tx.moveCall({
+          arguments: [
+            tx.object(id),
+            tx.object("0x6"), // Clock object
+          ],
+          target: `${crowdfundingPackageId}::crowd::finalize`,
+        });
+      }
+      return tx;
+    }, () => {
+      console.log("✅ Campaign finalization successful!");
+      console.log("🎯 Campaign should now be in succeeded state - you can withdraw funds!");
+      
+      // Refresh the component to update the UI
+      setTimeout(() => {
+        refetch();
+      }, 2000);
+    });
+  };
+
+  const runDiagnostics = async () => {
+    console.log("🔍 === CAMPAIGN WITHDRAWAL DIAGNOSTICS ===");
+    console.log("Campaign ID:", id);
+    console.log("Package ID:", crowdfundingPackageId);
+    console.log("Campaign Owner:", campaignFields?.owner);
+    console.log("Current Account:", currentAccount?.address);
+    console.log("Is Owner:", isOwner);
+    console.log("Campaign State:", campaignFields?.state, "- Should be 1 for withdrawal");
+    console.log("Campaign Raised:", campaignFields?.raised, "mist");
+    console.log("Campaign Raised (SUI):", formatSui(campaignFields?.raised || "0"));
+    console.log("Campaign Goal:", campaignFields?.goal, "mist");
+    console.log("Campaign Goal (SUI):", formatSui(campaignFields?.goal || "0"));
+    console.log("Funds Withdrawn:", fundsWithdrawn);
+    console.log("Withdrawal Check Status:", checkingWithdrawal);
+    console.log("Current Time:", new Date().toISOString());
+    console.log("Campaign Deadline:", deadline.toISOString());
+    console.log("Is Expired:", isExpired);
+    
+    // Test contract connection
+    console.log("🧪 Testing contract connection...");
+    try {
+      console.log("Target for withdraw:", `${crowdfundingPackageId}::crowd::withdraw`);
+      console.log("Target for force_succeeded:", `${crowdfundingPackageId}::crowd::force_succeeded`);
+      
+      // Try to fetch campaign data directly from blockchain
+      console.log("🔗 Fetching fresh campaign data from blockchain...");
+      const freshData = await suiClient.getObject({ 
+        id, 
+        options: { showContent: true, showOwner: true }
+      });
+      console.log("Fresh blockchain data:", freshData);
+      
+      if (freshData.data && freshData.data.content) {
+        const fields = (freshData.data.content as any).fields;
+        console.log("Fresh campaign fields:", fields);
+        console.log("Fresh state:", fields?.state, "(0=Active, 1=Succeeded, 2=Failed)");
+        console.log("Fresh raised:", fields?.raised);
+        console.log("Fresh withdrawn flag:", fields?.withdrawn);
+      }
+    } catch (error) {
+      console.error("Blockchain query error:", error);
+    }
+    
+    // Check wallet connection
+    console.log("💰 Wallet diagnostics:");
+    console.log("Current account address:", currentAccount?.address);
+    console.log("Wallet connected:", !!currentAccount);
+    
+    console.log("===========================================");
+  };
+
+  const deleteCampaign = () => {
+    const confirmDelete = window.confirm(
+      `⚠️ Are you sure you want to delete this campaign?\n\n` +
+      `"${metadata?.title || 'Untitled Campaign'}"\n\n` +
+      `This action will cancel the campaign and cannot be undone. ` +
+      `Only campaigns with no donations can be deleted.`
+    );
+    
+    if (!confirmDelete) return;
+
+    console.log("🗑️ Attempting to delete/cancel campaign...");
+    console.log("Campaign ID:", id);
+    console.log("Campaign raised:", raisedSui, "SUI");
+    
+    executeMove("delete_campaign", () => {
       const tx = new Transaction();
       tx.moveCall({
         arguments: [tx.object(id)],
-        target: `${crowdfundingPackageId}::crowd::force_succeeded`,
+        target: `${crowdfundingPackageId}::crowd::cancel_campaign`,
       });
-      console.log("💰 Force succeed transaction created");
+      console.log("🗑️ Cancel campaign transaction created");
       return tx;
     });
   };
@@ -428,8 +555,35 @@ export function Campaign({ id }: { id: string }) {
               {/* Testing buttons for campaign owner */}
               {isOwner && (
                 <div className="border-t pt-3 mt-4">
-                  <p className="text-sm text-gray-600 mb-2">🧪 Testing Controls (Owner Only):</p>
+                  <p className="text-sm text-gray-600 mb-2">👨‍💼 Owner Controls:</p>
                   <div className="flex flex-col gap-2">
+                    
+                    {/* Delete Campaign Button - only if no donations */}
+                    {campaignFields.state === 0 && parseFloat(raisedSui) === 0 && (
+                      <div className="bg-red-50 border border-red-200 rounded p-2">
+                        <div className="flex gap-2 items-center">
+                          <Button
+                            onClick={deleteCampaign}
+                            disabled={waitingForTxn !== ""}
+                            className="text-white px-3 text-sm"
+                            style={{ backgroundColor: '#EF4444' }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#DC2626'}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#EF4444'}
+                          >
+                            {waitingForTxn === "delete_campaign" ? (
+                              <ClipLoader size={14} color="white" />
+                            ) : (
+                              "🗑️ Delete Campaign"
+                            )}
+                          </Button>
+                          <span className="text-xs text-red-600">
+                            Cancel campaign permanently (only when no donations)
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <p className="text-sm text-gray-600 border-t pt-2">🧪 Testing Controls:</p>
                     <div className="flex gap-2">
                       <Button
                         onClick={forceEndCampaign}
@@ -449,14 +603,28 @@ export function Campaign({ id }: { id: string }) {
                         Forces campaign to succeed immediately for withdrawal testing
                       </span>
                     </div>
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={runDiagnostics}
+                        className="text-white px-3 text-sm"
+                        style={{ backgroundColor: '#6366F1' }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4F46E5'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#6366F1'}
+                      >
+                        🔍 Run Diagnostics
+                      </Button>
+                      <span className="text-xs text-gray-500 self-center">
+                        Check console logs to debug withdrawal issues
+                      </span>
+                    </div>
                     <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
                       <strong>🚀 Quick Withdrawal Testing:</strong><br/>
                       1. Donate any amount of SUI (doesn't need to meet goal)<br/>
                       2. Click "� End Campaign Now & Enable Withdrawal"<br/>
                       3. Use "💰 Withdraw Funds" button to transfer SUI to your wallet<br/>
                       <br/>
-                      <strong>Note:</strong> The "End Now" button forces the campaign to succeed 
-                      immediately, bypassing deadline and goal requirements for testing.
+                      <strong>🗑️ Delete Campaign:</strong> Only available when no donations have been made.<br/>
+                      <strong>🎯 End Now:</strong> Forces campaign to succeed immediately for testing withdrawals.
                     </div>
                   </div>
                 </div>
