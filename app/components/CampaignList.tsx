@@ -111,7 +111,6 @@ export function CampaignList({ onSelectCampaign, showOnlyMyCampaigns }: Campaign
   const [campaigns, setCampaigns] = useState<CampaignData[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCampaignId, setSelectedCampaignId] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [filterState, setFilterState] = useState<'all' | 'active' | 'succeeded' | 'failed'>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'mostFunded' | 'endingSoon'>('newest');
@@ -291,40 +290,11 @@ export function CampaignList({ onSelectCampaign, showOnlyMyCampaigns }: Campaign
     return filtered;
   }, [campaigns, filterState, searchTerm, sortBy, showOnlyMyCampaigns, currentAccount?.address, activeTab, refreshKey]);
 
-  // Handler for viewing campaigns - now supports both ID and name/slug
-  const handleViewCampaign = (campaignIdOrSlug?: string) => {
-    const input = campaignIdOrSlug || selectedCampaignId.trim();
-    
-    if (!input) {
-      console.error('No campaign ID or name provided');
+  // Handler for viewing campaigns
+  const handleViewCampaign = (campaignId: string) => {
+    if (!campaignId) {
+      console.error('No campaign ID provided');
       return;
-    }
-
-    // Check if input is a slug or an ID
-    let campaignId = input;
-    
-    // If it doesn't look like an ID (0x...), try to find it as a slug
-    if (!input.startsWith('0x')) {
-      const possibleSlug = createSlug(input);
-      const idFromSlug = slugToCampaignId.get(possibleSlug);
-      
-      if (idFromSlug) {
-        campaignId = idFromSlug;
-        console.log('Found campaign by slug:', possibleSlug, '->', campaignId);
-      } else {
-        // Try to find by partial title match
-        const matchingCampaign = campaigns.find(c => 
-          c.metadata.title?.toLowerCase().includes(input.toLowerCase())
-        );
-        
-        if (matchingCampaign) {
-          campaignId = matchingCampaign.id;
-          console.log('Found campaign by title match:', input, '->', campaignId);
-        } else {
-          alert(`Campaign not found: "${input}". Try using the campaign ID or exact title.`);
-          return;
-        }
-      }
     }
 
     console.log('Viewing campaign:', campaignId);
@@ -554,34 +524,7 @@ export function CampaignList({ onSelectCampaign, showOnlyMyCampaigns }: Campaign
             </div>
           )}
         </div>
-        
-        {/* Quick Access Card - Now supports names! */}
-        <Card className="border-purple-200 shadow-lg">
-          <CardHeader>
-            <CardTitle className="text-purple-700">⚡ Quick Campaign Access</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex gap-3">
-              <Input
-                type="text"
-                placeholder="Enter Campaign Name or ID (e.g., 'DeFi Revolution' or 0x123...)"
-                value={selectedCampaignId}
-                onChange={(e) => setSelectedCampaignId(e.target.value)}
-                className="border-purple-300 focus:border-purple-500"
-              />
-              <Button 
-                onClick={() => handleViewCampaign()}
-                disabled={!selectedCampaignId.trim()}
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-6"
-              >
-                View Campaign
-              </Button>
-            </div>
-            <p className="text-xs text-gray-500">
-              💡 Tip: You can search by campaign name or use the full ID
-            </p>
-          </CardContent>
-        </Card>
+
       </div>
 
       {/* Loading State */}
