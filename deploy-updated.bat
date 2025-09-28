@@ -1,0 +1,9 @@
+@echo off
+echo Deploying updated Move contract with force_succeeded function...
+cd move\crowdfunding
+echo Building contract...
+sui move build
+echo Publishing contract...
+sui client publish --gas-budget 100000000
+echo Done!
+pause

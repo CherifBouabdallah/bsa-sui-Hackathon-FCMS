@@ -165,7 +165,7 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
     return `${address.slice(0, 10)}...${address.slice(-8)}`;
   };
 
-  const explorerUrl = `https://suiexplorer.com/object/${campaignId}?network=testnet`;
+  const explorerUrl = `https://testnet.suivision.xyz/object/${campaignId}`;
   const currentBalance = totalDonated - totalWithdrawn - totalRefunded;
 
   return (
@@ -232,7 +232,7 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
             rel="noopener noreferrer"
             className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
           >
-            🔗 View on Sui Explorer
+            🔗 View on Sui Vision
           </a>
           <Button
             onClick={loadTransactionHistory}
@@ -285,7 +285,7 @@ export function MoneyFlowVerification({ campaignId, campaignOwner }: MoneyFlowVe
                       {formatDate(event.timestamp)}
                     </p>
                     <a
-                      href={`https://suiexplorer.com/txblock/${event.txDigest}?network=testnet`}
+                      href={`https://testnet.suivision.xyz/txblock/${event.txDigest}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-blue-600 hover:underline inline-flex items-center gap-1 mt-1"

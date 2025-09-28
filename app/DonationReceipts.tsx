@@ -54,29 +54,41 @@ export function DonationReceipts() {
   const requestRefund = (receiptId: string, campaignId: string) => {
     setProcessingRefund(receiptId);
 
-    const tx = new Transaction();
-    tx.moveCall({
-      arguments: [
-        tx.object(campaignId),
-        tx.object(receiptId),
-      ],
-      target: `${crowdfundingPackageId}::crowd::refund`,
-    });
+    try {
+      const tx = new Transaction();
+      tx.moveCall({
+        arguments: [
+          tx.object(campaignId),
+          tx.object(receiptId),
+        ],
+        target: `${crowdfundingPackageId}::crowd::refund`,
+      });
 
-    signAndExecute(
-      { transaction: tx },
-      {
-        onSuccess: async ({ digest }) => {
-          await suiClient.waitForTransaction({ digest });
-          await refetch();
-          setProcessingRefund("");
-        },
-        onError: (error) => {
-          console.error("Refund failed:", error);
-          setProcessingRefund("");
-        },
+      // Validate transaction before signing
+      if (!tx || Object.keys(tx).length === 0) {
+        console.error('Invalid transaction: Transaction is empty or malformed');
+        setProcessingRefund("");
+        return;
       }
-    );
+
+      signAndExecute(
+        { transaction: tx },
+        {
+          onSuccess: async ({ digest }) => {
+            await suiClient.waitForTransaction({ digest });
+            await refetch();
+            setProcessingRefund("");
+          },
+          onError: (error) => {
+            console.error("Refund failed:", error);
+            setProcessingRefund("");
+          },
+        }
+      );
+    } catch (error) {
+      console.error('Error creating refund transaction:', error);
+      setProcessingRefund("");
+    }
   };
 
   if (!currentAccount) {

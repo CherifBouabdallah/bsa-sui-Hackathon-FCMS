@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ConnectButton, useCurrentAccount } from "@mysten/dapp-kit";
 import { Button } from "./ui/button";
+import { UserProfileDialog } from "./UserProfileDialog";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -36,10 +38,13 @@ interface NavbarProps {
   view?: 'welcome' | 'create' | 'search' | 'receipts' | 'campaign';
   onViewChange?: (view: 'welcome' | 'create' | 'search' | 'receipts' | 'campaign') => void;
   onGoHome?: () => void;
+  userName?: string | null;
+  onUpdateName?: (name: string) => void;
 }
 
-export default function Navbar({ view, onViewChange, onGoHome }: NavbarProps) {
+export default function Navbar({ view, onViewChange, onGoHome, userName, onUpdateName }: NavbarProps) {
   const currentAccount = useCurrentAccount();
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
 
   return (
     <div className="sticky top-0 z-50 w-full" style={{ backgroundColor: '#061E37' }}>
@@ -131,10 +136,34 @@ export default function Navbar({ view, onViewChange, onGoHome }: NavbarProps) {
             </div>
           )}
 
-          {/* Right side - Wallet Connection */}
-          <div className="flex items-center">
+          {/* Right side - User Profile and Wallet Connection */}
+          <div className="flex items-center space-x-2">
+            {currentAccount && userName && onUpdateName && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowProfileDialog(true)}
+                className="text-white hover:bg-purple-600/20"
+                title={`Logged in as ${userName}`}
+              >
+                👤 <span className="hidden sm:inline ml-1">{userName}</span>
+              </Button>
+            )}
             <ConnectButton />
           </div>
+
+          {/* User Profile Dialog */}
+          {userName && onUpdateName && (
+            <UserProfileDialog
+              isOpen={showProfileDialog}
+              currentName={userName}
+              onClose={() => setShowProfileDialog(false)}
+              onUpdateName={(name) => {
+                onUpdateName(name);
+                setShowProfileDialog(false);
+              }}
+            />
+          )}
         </div>
       </div>
     </div>

@@ -264,4 +264,26 @@ module crowdfunding::crowd {
         
         transfer::public_transfer(coin_out, to);
     }
+
+    /// ---------- Testing Functions ----------
+    /// Force campaign to succeed for testing purposes (owner only)
+    public entry fun force_succeeded(
+        c: &mut Campaign,
+        ctx: &mut TxContext
+    ) {
+        // Check sender is owner (for security)
+        assert!(sender(ctx) == c.owner, E_NOT_OWNER);
+        
+        // Check not already finalized
+        assert!(c.state == STATE_ACTIVE, E_ALREADY_FINALIZED);
+
+        // Force success regardless of goal
+        c.state = STATE_SUCCEEDED;
+
+        event::emit(Finalized { 
+            campaign: object::uid_to_inner(&c.id), 
+            state: c.state, 
+            raised: c.raised 
+        });
+    }
 }

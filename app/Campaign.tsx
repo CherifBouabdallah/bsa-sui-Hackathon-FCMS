@@ -72,6 +72,7 @@ export function Campaign({ id }: { id: string }) {
   const [currentTime, setCurrentTime] = useState<number | null>(null);
   const [fundsWithdrawn, setFundsWithdrawn] = useState<boolean>(false);
   const [checkingWithdrawal, setCheckingWithdrawal] = useState<boolean>(false);
+  const [timeLeft, setTimeLeft] = useState<string>("");
 
   // Set current time on client side only to prevent hydration errors
   useEffect(() => {
@@ -110,6 +111,43 @@ export function Campaign({ id }: { id: string }) {
     checkWithdrawalStatus();
   }, [data?.data, suiClient, id]);
 
+  // Update countdown timer every second
+  useEffect(() => {
+    if (!data?.data) return;
+    
+    const fields = getCampaignFields(data.data);
+    if (!fields?.deadline_ms) return;
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const deadline = parseInt(fields.deadline_ms);
+      const difference = deadline - now;
+
+      if (difference > 0) {
+        const days = Math.floor(difference / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((difference % (1000 * 60)) / 1000);
+
+        if (days > 0) {
+          setTimeLeft(`${days}d ${hours}h ${minutes}m ${seconds}s`);
+        } else if (hours > 0) {
+          setTimeLeft(`${hours}h ${minutes}m ${seconds}s`);
+        } else if (minutes > 0) {
+          setTimeLeft(`${minutes}m ${seconds}s`);
+        } else {
+          setTimeLeft(`${seconds}s`);
+        }
+      } else {
+        setTimeLeft("Expired - Ready to finalize!");
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [data?.data]);
+
   const executeMove = (
     action: string,
     transaction: () => Transaction,
@@ -117,22 +155,73 @@ export function Campaign({ id }: { id: string }) {
   ) => {
     setWaitingForTxn(action);
 
-    signAndExecute(
-      {
-        transaction: transaction(),
-      },
-      {
-        onSuccess: async ({ digest }) => {
+    try {
+      const tx = transaction();
+      
+      // Validate transaction has operations
+      if (!tx || !tx.blockData || tx.blockData.transactions.length === 0) {
+        console.error('Empty transaction block detected');
+        setWaitingForTxn("");
+        return;
+      }
+
+      signAndExecute(
+        {
+          transaction: tx,
+        },
+        {
+          onSuccess: async ({ digest }) => {
           await suiClient.waitForTransaction({ digest });
           await refetch();
           setWaitingForTxn("");
           if (onSuccess) onSuccess();
         },
-        onError: () => {
+        onError: (error) => {
+          console.error(`❌ Transaction failed for action "${action}":`, error);
+          
+          // Decode Move abort errors
+          if (error?.message?.includes('MoveAbort')) {
+            const errorMsg = error.message;
+            if (errorMsg.includes('}, 3)')) {
+              console.error('🚫 Error: Campaign deadline has not been reached yet');
+            } else if (errorMsg.includes('}, 6)')) {
+              console.error('🚫 Error: Campaign deadline has passed (cannot donate anymore)');
+            } else if (errorMsg.includes('}, 5)')) {
+              console.error('🚫 Error: Campaign already finalized');
+            } else if (errorMsg.includes('}, 7)')) {
+              console.error('🚫 Error: Campaign has not succeeded (cannot withdraw)');
+            } else if (errorMsg.includes('}, 8)')) {
+              console.error('🚫 Error: You are not the campaign owner');
+            }
+          }
+          
+          // Special handling for force_succeeded function not found - try regular finalize
+          if (action === "force_end" && (error?.message?.includes('function') || error?.message?.includes('EntryFunctionNotFound'))) {
+            console.error('❌ The force_succeeded function is not available in the deployed contract.');
+            console.log('� Trying regular finalize function instead...');
+            
+            // Fallback to regular finalize
+            executeMove("finalize_fallback", () => {
+              const tx = new Transaction();
+              tx.moveCall({
+                arguments: [
+                  tx.object(id),
+                  tx.object("0x6"), // Clock object
+                ],
+                target: `${crowdfundingPackageId}::crowd::finalize`,
+              });
+              return tx;
+            });
+          }
+          
           setWaitingForTxn("");
         },
       }
     );
+    } catch (error) {
+      console.error('Transaction execution error:', error);
+      setWaitingForTxn("");
+    }
   };
 
   const donate = () => {
@@ -172,18 +261,29 @@ export function Campaign({ id }: { id: string }) {
   };
 
   const withdrawFunds = () => {
+    console.log("🚀 Starting withdrawal process...");
+    console.log("Campaign ID:", id);
+    console.log("Campaign Owner:", campaignFields?.owner);
+    console.log("Current Account:", currentAccount?.address);
+    console.log("Is Owner:", isOwner);
+    console.log("Campaign State:", campaignFields?.state);
+    console.log("Raised Amount:", campaignFields?.raised);
+    
     executeMove("withdraw", () => {
       const tx = new Transaction();
       tx.moveCall({
         arguments: [tx.object(id)],
         target: `${crowdfundingPackageId}::crowd::withdraw`,
       });
+      console.log("💰 Withdraw transaction created:", tx);
       return tx;
     }, async () => {
       // On successful withdrawal, check the blockchain state
+      console.log("✅ Withdrawal transaction successful!");
       try {
         const withdrawn = await checkIfFundsWithdrawn(suiClient, id);
         setFundsWithdrawn(withdrawn);
+        console.log("💳 Withdrawal status updated:", withdrawn);
       } catch (error) {
         console.error("Error checking withdrawal status after transaction:", error);
         // Fallback: assume withdrawal was successful
@@ -192,13 +292,23 @@ export function Campaign({ id }: { id: string }) {
     });
   };
 
-  const forceFinalizeCampaign = () => {
-    executeMove("force_finalize", () => {
+  const forceEndCampaign = () => {
+    console.log("🚀 Attempting to force campaign to end...");
+    console.log("Campaign ID:", id);
+    console.log("Campaign Owner:", campaignFields?.owner);
+    console.log("Current Account:", currentAccount?.address);
+    console.log("Campaign raised:", raisedSui, "SUI, Goal:", goalSui, "SUI");
+    console.log("Campaign deadline:", deadline.toLocaleString());
+    console.log("Is expired:", isExpired);
+    
+    // First try the new force_succeeded function
+    executeMove("force_end", () => {
       const tx = new Transaction();
       tx.moveCall({
         arguments: [tx.object(id)],
         target: `${crowdfundingPackageId}::crowd::force_succeeded`,
       });
+      console.log("💰 Force succeed transaction created");
       return tx;
     });
   };
@@ -319,24 +429,35 @@ export function Campaign({ id }: { id: string }) {
               {isOwner && (
                 <div className="border-t pt-3 mt-4">
                   <p className="text-sm text-gray-600 mb-2">🧪 Testing Controls (Owner Only):</p>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={forceFinalizeCampaign}
-                      disabled={waitingForTxn !== ""}
-                      className="text-white px-4 text-sm"
-                      style={{ backgroundColor: '#F59E0B' }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#D97706'}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#F59E0B'}
-                    >
-                      {waitingForTxn === "force_finalize" ? (
-                        <ClipLoader size={14} color="white" />
-                      ) : (
-                        "🏁 Finish Campaign Now"
-                      )}
-                    </Button>
-                    <span className="text-xs text-gray-500 self-center">
-                      Forces campaign to succeed for testing withdrawals
-                    </span>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={forceEndCampaign}
+                        disabled={waitingForTxn !== ""}
+                        className="text-white px-4 text-sm"
+                        style={{ backgroundColor: '#DC2626' }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#B91C1C'}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#DC2626'}
+                      >
+                        {waitingForTxn === "force_end" ? (
+                          <ClipLoader size={14} color="white" />
+                        ) : (
+                          "� End Campaign Now & Enable Withdrawal"
+                        )}
+                      </Button>
+                      <span className="text-xs text-gray-500 self-center">
+                        Forces campaign to succeed immediately for withdrawal testing
+                      </span>
+                    </div>
+                    <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                      <strong>🚀 Quick Withdrawal Testing:</strong><br/>
+                      1. Donate any amount of SUI (doesn't need to meet goal)<br/>
+                      2. Click "� End Campaign Now & Enable Withdrawal"<br/>
+                      3. Use "💰 Withdraw Funds" button to transfer SUI to your wallet<br/>
+                      <br/>
+                      <strong>Note:</strong> The "End Now" button forces the campaign to succeed 
+                      immediately, bypassing deadline and goal requirements for testing.
+                    </div>
                   </div>
                 </div>
               )}

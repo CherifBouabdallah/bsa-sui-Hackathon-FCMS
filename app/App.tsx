@@ -8,6 +8,7 @@ import { CampaignList } from "./components/CampaignList";
 import { DonationReceipts } from "./DonationReceipts";
 import { Card, CardContent } from "@/components/ui/card";
 import Navbar from "./components/Navbar";
+import { NameDialog } from "./components/NameDialog";
 import { useSuiClient } from "@mysten/dapp-kit";
 import { DEVNET_CROWDFUNDING_PACKAGE_ID } from "./constants";
 
@@ -19,6 +20,8 @@ function App() {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [animationKey, setAnimationKey] = useState(0);
   const [isResolvingCampaign, setIsResolvingCampaign] = useState(false);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [showNameDialog, setShowNameDialog] = useState(false);
 
   // Helper function to resolve campaign name to ID
   const resolveCampaignIdentifier = async (identifier: string): Promise<string | null> => {
@@ -102,6 +105,27 @@ function App() {
     return null;
   };
 
+  // Check for stored user name and handle first-time login
+  useEffect(() => {
+    if (currentAccount && typeof window !== 'undefined') {
+      const userKey = `user_name_${currentAccount.address}`;
+      const storedName = localStorage.getItem(userKey);
+      
+      if (storedName) {
+        setUserName(storedName);
+        setShowNameDialog(false);
+      } else {
+        // First time login for this wallet address - show name dialog
+        setUserName(null);
+        setShowNameDialog(true);
+      }
+    } else if (!currentAccount) {
+      // Reset user name and dialog when account disconnects
+      setUserName(null);
+      setShowNameDialog(false);
+    }
+  }, [currentAccount?.address]); // Watch for address changes
+
   useEffect(() => {
     // Only access window on client side to prevent hydration errors
     const checkHashAndResolve = async () => {
@@ -119,6 +143,23 @@ function App() {
 
     checkHashAndResolve();
   }, []);
+
+  const handleNameSubmit = (name: string) => {
+    if (currentAccount && typeof window !== 'undefined') {
+      const userKey = `user_name_${currentAccount.address}`;
+      localStorage.setItem(userKey, name);
+      setUserName(name);
+      setShowNameDialog(false);
+    }
+  };
+
+  const handleUpdateName = (name: string) => {
+    if (currentAccount && typeof window !== 'undefined') {
+      const userKey = `user_name_${currentAccount.address}`;
+      localStorage.setItem(userKey, name);
+      setUserName(name);
+    }
+  };
 
   const handleCampaignCreated = (id: string) => {
     console.log('Campaign created with ID:', id);
@@ -159,7 +200,11 @@ function App() {
   if (!currentAccount) {
     return (
       <div className="min-h-screen w-full">
-        <Navbar onGoHome={goBackToWelcome} />
+        <Navbar 
+          onGoHome={goBackToWelcome}
+          userName={userName}
+          onUpdateName={handleUpdateName}
+        />
         <div className="min-h-[60vh] flex items-center justify-center pt-4 sm:pt-6">
           <Card className="max-w-2xl w-full mx-auto">
             <CardContent className="pt-6">
@@ -189,7 +234,13 @@ function App() {
   if (isResolvingCampaign) {
     return (
       <div className="min-h-screen w-full">
-        <Navbar view={view} onViewChange={(newView) => animatedViewChange(newView)} onGoHome={goBackToWelcome} />
+        <Navbar 
+          view={view} 
+          onViewChange={(newView) => animatedViewChange(newView)} 
+          onGoHome={goBackToWelcome}
+          userName={userName}
+          onUpdateName={handleUpdateName}
+        />
         <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
@@ -206,7 +257,9 @@ function App() {
       <Navbar 
         view={view} 
         onViewChange={(newView) => animatedViewChange(newView)} 
-        onGoHome={goBackToWelcome} 
+        onGoHome={goBackToWelcome}
+        userName={userName}
+        onUpdateName={handleUpdateName}
       />
 
       {/* Main Content */}
@@ -216,7 +269,7 @@ function App() {
           isTransitioning 
             ? 'opacity-0 translate-y-4 scale-95' 
             : 'opacity-100 translate-y-0 scale-100'
-        }`}
+        } ${showNameDialog ? 'pointer-events-none' : 'pointer-events-auto'}`}
         style={{
           animation: isTransitioning ? 'none' : 'fadeSlideIn 0.3s ease-out'
         }}
@@ -229,10 +282,10 @@ function App() {
                 <span className="text-5xl sm:text-6xl">🚀</span>
               </div>
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 mb-4 px-4">
-                Welcome back!
+                {userName ? `Welcome ${userName}!` : 'Welcome back!'}
               </h1>
               <p className="text-lg sm:text-xl text-white max-w-4xl mx-auto mb-6 sm:mb-8 px-4">
-                Ready to make a difference? Create your own campaign or support existing projects on the blockchain.
+                {userName ? `Hello ${userName}! ` : ''}Ready to make a difference? Create your own campaign or support existing projects on the blockchain.
               </p>
             </div>
 
@@ -326,6 +379,12 @@ function App() {
           <DonationReceipts />
         )}
       </div>
+
+      {/* Name Dialog for first-time users - renders on top with blurred background */}
+      <NameDialog 
+        isOpen={showNameDialog}
+        onSubmit={handleNameSubmit}
+      />
     </div>
   );
 }
