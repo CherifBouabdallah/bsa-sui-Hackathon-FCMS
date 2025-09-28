@@ -26,6 +26,7 @@ interface CampaignFields {
   raised: string;
   state: number;
   metadata_cid: number[];
+  withdrawn: boolean;
 }
 
 function getCampaignFields(data: SuiObjectData): CampaignFields | null {
@@ -94,13 +95,32 @@ export function Campaign({ id }: { id: string }) {
     const checkWithdrawalStatus = async () => {
       if (data?.data) {
         const campaignFields = getCampaignFields(data.data);
-        if (campaignFields && campaignFields.state === 1) {
+        if (campaignFields) {
           setCheckingWithdrawal(true);
           try {
-            const withdrawn = await checkIfFundsWithdrawn(suiClient, id);
-            setFundsWithdrawn(withdrawn);
+            // Use the withdrawn field directly from campaign fields as primary source
+            const withdrawnFromContract = campaignFields.withdrawn || false;
+            
+            // Also check via blockchain query as backup
+            const withdrawnFromQuery = await checkIfFundsWithdrawn(suiClient, id);
+            
+            // Use the more reliable source (contract field should be definitive)
+            const finalWithdrawnStatus = withdrawnFromContract || withdrawnFromQuery;
+            
+            console.log("📊 Withdrawal status check:", {
+              withdrawnFromContract,
+              withdrawnFromQuery,
+              finalWithdrawnStatus,
+              campaignState: campaignFields.state
+            });
+            
+            setFundsWithdrawn(finalWithdrawnStatus);
           } catch (error) {
             console.error("Error checking withdrawal status:", error);
+            // Fallback to campaign field if available
+            if (campaignFields.withdrawn !== undefined) {
+              setFundsWithdrawn(campaignFields.withdrawn);
+            }
           } finally {
             setCheckingWithdrawal(false);
           }
@@ -304,20 +324,38 @@ export function Campaign({ id }: { id: string }) {
       console.log("💰 Withdraw transaction created:", tx);
       return tx;
     }, async () => {
-      // On successful withdrawal, check the blockchain state
-      console.log("✅ Withdrawal transaction successful!");
+      // On successful withdrawal, wait for blockchain state to update
+      console.log("✅ Withdrawal transaction successful! Waiting for blockchain state update...");
+      
+      // Wait for the blockchain to update
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      
       try {
-        const withdrawn = await checkIfFundsWithdrawn(suiClient, id);
-        setFundsWithdrawn(withdrawn);
-        console.log("💳 Withdrawal status updated:", withdrawn);
+        // Force refresh the campaign data first
+        await refetch();
         
-        // Show success message
-        alert(`🎉 Withdrawal successful!\n\n${formatSui(campaignFields?.raised || "0")} SUI has been transferred to your wallet.`);
+        // Check withdrawal status multiple times to ensure we get the updated state
+        let withdrawn = false;
+        for (let i = 0; i < 5; i++) {
+          withdrawn = await checkIfFundsWithdrawn(suiClient, id);
+          console.log(`🔍 Withdrawal check attempt ${i + 1}: ${withdrawn}`);
+          if (withdrawn) break;
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        setFundsWithdrawn(withdrawn);
+        console.log("💳 Final withdrawal status:", withdrawn);
+        
+        if (withdrawn) {
+          alert(`🎉 Withdrawal successful!\n\n${formatSui(campaignFields?.raised || "0")} SUI has been transferred to your Suiet wallet.\n\nPlease check your wallet balance.`);
+        } else {
+          alert(`⚠️ Withdrawal transaction completed, but status not updated yet.\n\nPlease refresh the page in a few moments to see the updated status.\n\nFunds should be in your Suiet wallet now.`);
+        }
       } catch (error) {
         console.error("Error checking withdrawal status after transaction:", error);
         // Fallback: assume withdrawal was successful
         setFundsWithdrawn(true);
-        alert(`✅ Withdrawal completed!\n\nFunds should be in your wallet now.`);
+        alert(`✅ Withdrawal transaction completed!\n\n${formatSui(campaignFields?.raised || "0")} SUI should now be in your Suiet wallet.\n\nIf the status doesn't update, please refresh the page.`);
       }
     });
   };
@@ -456,6 +494,15 @@ export function Campaign({ id }: { id: string }) {
 
   const campaignFields = getCampaignFields(data.data);
   if (!campaignFields) return <div className="p-4">Invalid campaign data</div>;
+
+  // Debug logging for withdrawal status
+  console.log("🔍 Campaign fields:", {
+    state: campaignFields.state,
+    raised: campaignFields.raised,
+    withdrawn: campaignFields.withdrawn,
+    owner: campaignFields.owner,
+    currentAccount: currentAccount?.address
+  });
 
   const metadata = parseMetadata(campaignFields.metadata_cid);
   const isOwner = currentAccount?.address === campaignFields.owner;
@@ -685,28 +732,55 @@ export function Campaign({ id }: { id: string }) {
                 )}
               </div>
               {!checkingWithdrawal && !fundsWithdrawn && (
-                <Button
-                  onClick={withdrawFunds}
-                  disabled={waitingForTxn !== ""}
-                  className="w-full text-white text-lg py-3"
-                  style={{ backgroundColor: '#059669' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#047857'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#059669'}
-                >
-                  {waitingForTxn === "withdraw" ? (
-                    <ClipLoader size={16} color="white" />
-                  ) : (
-                    "💰 Withdraw Funds to Your Wallet"
-                  )}
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    onClick={withdrawFunds}
+                    disabled={waitingForTxn !== ""}
+                    className="w-full text-white text-lg py-3"
+                    style={{ backgroundColor: '#059669' }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#047857'}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#059669'}
+                  >
+                    {waitingForTxn === "withdraw" ? (
+                      <ClipLoader size={16} color="white" />
+                    ) : (
+                      "💰 Withdraw Funds to Your Wallet"
+                    )}
+                  </Button>
+                  <Button
+                    onClick={runDiagnostics}
+                    className="w-full text-orange-700 bg-orange-100 hover:bg-orange-200 text-sm py-2"
+                  >
+                    🔍 Run Diagnostics
+                  </Button>
+                </div>
               )}
               {!checkingWithdrawal && fundsWithdrawn && (
-                <Button
-                  disabled={true}
-                  className="w-full text-gray-500 bg-gray-300 cursor-not-allowed text-lg py-3"
-                >
-                  💳 Funds Already Withdrawn
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    disabled={true}
+                    className="w-full text-gray-500 bg-gray-300 cursor-not-allowed text-lg py-3"
+                  >
+                    💳 Funds Already Withdrawn
+                  </Button>
+                  <div className="flex space-x-2">
+                    <Button
+                      onClick={() => {
+                        console.log("🔄 Manual refresh triggered");
+                        refetch();
+                      }}
+                      className="flex-1 text-blue-700 bg-blue-100 hover:bg-blue-200 text-sm py-2"
+                    >
+                      🔄 Refresh Status
+                    </Button>
+                    <Button
+                      onClick={runDiagnostics}
+                      className="flex-1 text-orange-700 bg-orange-100 hover:bg-orange-200 text-sm py-2"
+                    >
+                      🔍 Debug Info
+                    </Button>
+                  </div>
+                </div>
               )}
               {checkingWithdrawal && (
                 <Button

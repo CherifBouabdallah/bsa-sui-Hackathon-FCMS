@@ -94,7 +94,7 @@ export const formatDate = (timestamp: number): string => {
   }).format(new Date(timestamp));
 };
 
-// Check if campaign funds have been withdrawn by examining treasury balance
+// Check if campaign funds have been withdrawn by examining the withdrawn field
 export const checkIfFundsWithdrawn = async (
   suiClient: SuiClient,
   campaignId: string
@@ -114,13 +114,22 @@ export const checkIfFundsWithdrawn = async (
     const content = result.data.content as any;
     const fields = content.fields;
     
-    // Check if campaign succeeded and has raised funds but treasury is empty
+    // Use the withdrawn field from the smart contract - this is the definitive source
+    const withdrawn = fields.withdrawn || false;
+    
+    // Also log additional info for debugging
     const raised = parseInt(fields.raised || "0");
     const state = fields.state;
     const treasuryBalance = parseInt(fields.treasury?.fields?.value || "0");
     
-    // If campaign succeeded, has raised funds, but treasury is empty, then funds were withdrawn
-    return state === 1 && raised > 0 && treasuryBalance === 0;
+    console.log("🔍 Withdrawal status check:", {
+      withdrawn,
+      state,
+      raised,
+      treasuryBalance
+    });
+    
+    return withdrawn;
   } catch (error) {
     console.error("Error checking withdrawal status:", error);
     return false;
