@@ -402,56 +402,7 @@ export function Campaign({ id }: { id: string }) {
     });
   };
 
-  const runDiagnostics = async () => {
-    console.log("🔍 === CAMPAIGN WITHDRAWAL DIAGNOSTICS ===");
-    console.log("Campaign ID:", id);
-    console.log("Package ID:", crowdfundingPackageId);
-    console.log("Campaign Owner:", campaignFields?.owner);
-    console.log("Current Account:", currentAccount?.address);
-    console.log("Is Owner:", isOwner);
-    console.log("Campaign State:", campaignFields?.state, "- Should be 1 for withdrawal");
-    console.log("Campaign Raised:", campaignFields?.raised, "mist");
-    console.log("Campaign Raised (SUI):", formatSui(campaignFields?.raised || "0"));
-    console.log("Campaign Goal:", campaignFields?.goal, "mist");
-    console.log("Campaign Goal (SUI):", formatSui(campaignFields?.goal || "0"));
-    console.log("Funds Withdrawn:", fundsWithdrawn);
-    console.log("Withdrawal Check Status:", checkingWithdrawal);
-    console.log("Current Time:", new Date().toISOString());
-    console.log("Campaign Deadline:", deadline.toISOString());
-    console.log("Is Expired:", isExpired);
-    
-    // Test contract connection
-    console.log("🧪 Testing contract connection...");
-    try {
-      console.log("Target for withdraw:", `${crowdfundingPackageId}::crowd::withdraw`);
-      console.log("Target for force_succeeded:", `${crowdfundingPackageId}::crowd::force_succeeded`);
-      
-      // Try to fetch campaign data directly from blockchain
-      console.log("🔗 Fetching fresh campaign data from blockchain...");
-      const freshData = await suiClient.getObject({ 
-        id, 
-        options: { showContent: true, showOwner: true }
-      });
-      console.log("Fresh blockchain data:", freshData);
-      
-      if (freshData.data && freshData.data.content) {
-        const fields = (freshData.data.content as any).fields;
-        console.log("Fresh campaign fields:", fields);
-        console.log("Fresh state:", fields?.state, "(0=Active, 1=Succeeded, 2=Failed)");
-        console.log("Fresh raised:", fields?.raised);
-        console.log("Fresh withdrawn flag:", fields?.withdrawn);
-      }
-    } catch (error) {
-      console.error("Blockchain query error:", error);
-    }
-    
-    // Check wallet connection
-    console.log("💰 Wallet diagnostics:");
-    console.log("Current account address:", currentAccount?.address);
-    console.log("Wallet connected:", !!currentAccount);
-    
-    console.log("===========================================");
-  };
+
 
   const deleteCampaign = () => {
     const confirmDelete = window.confirm(
@@ -650,20 +601,7 @@ export function Campaign({ id }: { id: string }) {
                         Forces campaign to succeed immediately for withdrawal testing
                       </span>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={runDiagnostics}
-                        className="text-white px-3 text-sm"
-                        style={{ backgroundColor: '#6366F1' }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#4F46E5'}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#6366F1'}
-                      >
-                        🔍 Run Diagnostics
-                      </Button>
-                      <span className="text-xs text-gray-500 self-center">
-                        Check console logs to debug withdrawal issues
-                      </span>
-                    </div>
+
                     <div className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
                       <strong>🚀 Quick Withdrawal Testing:</strong><br/>
                       1. Donate any amount of SUI (doesn't need to meet goal)<br/>
@@ -732,28 +670,20 @@ export function Campaign({ id }: { id: string }) {
                 )}
               </div>
               {!checkingWithdrawal && !fundsWithdrawn && (
-                <div className="space-y-2">
-                  <Button
-                    onClick={withdrawFunds}
-                    disabled={waitingForTxn !== ""}
-                    className="w-full text-white text-lg py-3"
-                    style={{ backgroundColor: '#059669' }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#047857'}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#059669'}
-                  >
-                    {waitingForTxn === "withdraw" ? (
-                      <ClipLoader size={16} color="white" />
-                    ) : (
-                      "💰 Withdraw Funds to Your Wallet"
-                    )}
-                  </Button>
-                  <Button
-                    onClick={runDiagnostics}
-                    className="w-full text-orange-700 bg-orange-100 hover:bg-orange-200 text-sm py-2"
-                  >
-                    🔍 Run Diagnostics
-                  </Button>
-                </div>
+                <Button
+                  onClick={withdrawFunds}
+                  disabled={waitingForTxn !== ""}
+                  className="w-full text-white text-lg py-3"
+                  style={{ backgroundColor: '#059669' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#047857'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#059669'}
+                >
+                  {waitingForTxn === "withdraw" ? (
+                    <ClipLoader size={16} color="white" />
+                  ) : (
+                    "💰 Withdraw Funds to Your Wallet"
+                  )}
+                </Button>
               )}
               {!checkingWithdrawal && fundsWithdrawn && (
                 <div className="space-y-2">
@@ -763,23 +693,15 @@ export function Campaign({ id }: { id: string }) {
                   >
                     💳 Funds Already Withdrawn
                   </Button>
-                  <div className="flex space-x-2">
-                    <Button
-                      onClick={() => {
-                        console.log("🔄 Manual refresh triggered");
-                        refetch();
-                      }}
-                      className="flex-1 text-blue-700 bg-blue-100 hover:bg-blue-200 text-sm py-2"
-                    >
-                      🔄 Refresh Status
-                    </Button>
-                    <Button
-                      onClick={runDiagnostics}
-                      className="flex-1 text-orange-700 bg-orange-100 hover:bg-orange-200 text-sm py-2"
-                    >
-                      🔍 Debug Info
-                    </Button>
-                  </div>
+                  <Button
+                    onClick={() => {
+                      console.log("🔄 Manual refresh triggered");
+                      refetch();
+                    }}
+                    className="w-full text-blue-700 bg-blue-100 hover:bg-blue-200 text-sm py-2"
+                  >
+                    🔄 Refresh Status
+                  </Button>
                 </div>
               )}
               {checkingWithdrawal && (
